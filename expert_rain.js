@@ -1,80 +1,294 @@
 /**
- * expert_rain.js – Rain Expert for Symbiote Studio MoE World Model
+ * expert_rain.js – Rain Expert (Professional Two‑Layer Model)
  *
- * Exports a single class `RainExpert` that powers a diffuse, realistic rain field
- * with spatial depth (near/far), air absorption filtering, stereo panning, and
- * a dynamic scheduler that reacts to world pressure and local density.
+ * Exports a default class `RainExpert` that generates realistic, diffuse rain
+ * using a continuous noise bed (the distant roar) and a stochastic near‑field
+ * drop scheduler.  The dual‑layer approach eliminates the “machine‑gun”
+ * rhythm that emerges from naive periodic spawning, producing natural
+ * rainfall even at extreme intensity.
  *
- * Lifecycle:
- *   constructor(audioCtx, destinationNode)  – receives shared audio context
- *     and the master bus node (from app.js).
- *   onWorldStateUpdate(state)               – updates global pressure & enclosure.
- *   getUICard()                             – returns card HTML string.
- *   bindCardControls(cardElement)           – wires up the density slider.
- *   destroy()                               – stops all scheduled timers and frees
- *                                             any persistent resources.
- *
- * DSP core:
- *   - Every drop is a short burst of white noise shaped by an exponential decay
- *     envelope.
- *   - Distance (0 = near, 1 = far) controls: volume (inverse law), bandpass
- *     frequency (near → high/crisp, far → low/muffled), and subtle duration
- *     shortening.
- *   - StereoPannerNode distributes drops across the X‑axis randomly.
- *   - Scheduler adapts intensity = globalPressure * localDensity. High intensity
- *     spawns more drops with a bias toward distant drops, creating a continuous
- *     bed of rain while keeping near‑field percussive drops audible.
+ * Lifecycle (matches the MoE World Model contract):
+ *   constructor(audioCtx, destinationNode)  – shared AudioContext & master bus
+ *   onWorldStateUpdate(state)               – updates global pressure/enclosure
+ *   getUICard()                             – card HTML string
+ *   bindCardControls(cardElement)           – wires density slider & starts engine
+ *   destroy()                               – stops bed, clears timeouts
  */
 
 export default class RainExpert {
   /**
-   * @param {AudioContext} audioCtx       – shared AudioContext from app.js
-   * @param {AudioNode}    destinationNode – master bus node (usually an
-   *     AudioGainNode acting as the summing mixer)
+   * @param {AudioContext} audioCtx        – shared AudioContext from app.js
+   * @param {AudioNode}    destinationNode – master bus (summing point)
    */
   constructor(audioCtx, destinationNode) {
-    // Allow graceful degradation if called without arguments (for incremental
-    // integration with current app.js – should be passed in production).
     if (!audioCtx) {
       throw new Error(
         'RainExpert requires an AudioContext. Pass it as first argument.'
       );
     }
 
+    /** @type {AudioContext} */
     this.audioCtx = audioCtx;
+    /** @type {AudioNode} – master bus input */
     this.masterDestination = destinationNode || audioCtx.destination;
 
-    // Unique identifier – used for DOM mapping
+    // Unique identifier (used for DOM and logging)
     this.id = crypto.randomUUID?.() ?? this._fallbackUUID();
 
-    // World state
-    this.globalPressure = 0.5;          // from onWorldStateUpdate
-    this.localDensity = 0.5;           // from the card’s density slider
-    this.enclosure = 'open';           // stored but currently not used in
-                                       // perceptual processing
+    // ── World State ──────────────────────────────────────────────────
+    this.globalPressure = 0.5;       // 0‑1 from atmosphere slider
+    this.localDensity = 0.5;        // 0‑1 from the card’s density slider
+    this.enclosure = 'open';        // currently informational
 
-    // Scheduler housekeeping
+    // ── Continuous Rain Bed (Layer 1) ───────────────────────────────
+    /**
+     * Looping buffer source of white noise, filtered to a low roar,
+     * connected to a dedicated GainNode that is faded in/out with intensity.
+     */
+    this.bedSource = null;
+    this.bedFilter = null;
+    this.bedGain = null;
+
+    // ── Stochastic Drop Scheduler (Layer 2) ────────────────────────
     this._isDestroyed = false;
-    this._scheduleTimeout = null;      // latest setTimeout id for main loop
-    this._auxTimeouts = [];            // IDs of any auxiliary timeouts (bursts)
+    this._dropTimeout = null;       // current setTimeout for next drop
+    this._allAuxTimeouts = [];      // any additional per‑drop delays (unused now)
 
-    // No persistent audio nodes besides those created per drop; all
-    // per‑drop nodes are disconnected on ended automatically.
+    // Initialise the continuous bed (audio nodes are created but silent)
+    this._createRainBed();
   }
 
-  /**
-   * Fallback UUID generator for environments without crypto.randomUUID.
-   */
+  // -------------------------------------------------------------------
+  //  Fallback UUID
+  // -------------------------------------------------------------------
   _fallbackUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
       const r = (Math.random() * 16) | 0;
-      const v = c === 'x' ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
+      return c === 'x' ? r : (r & 0x3) | 0x8;
     });
   }
 
+  // -------------------------------------------------------------------
+  //  Layer 1: Continuous Noise Bed
+  // -------------------------------------------------------------------
   /**
-   * Receives updates from the global Router Console.
+   * Creates a looping white‑noise buffer, routes it through a low‑pass
+   * filter (brown/pink character) and a GainNode.
+   * The buffer is started immediately; the GainNode controls audibility.
+   */
+  _createRainBed() {
+    const ctx = this.audioCtx;
+    const sampleRate = ctx.sampleRate;
+    const duration = 2.0; // seconds – long enough to avoid audible looping
+
+    // Generate white noise buffer
+    const length = Math.floor(sampleRate * duration);
+    const buffer = ctx.createBuffer(1, length, sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      data[i] = Math.random() * 2 - 1;  // uniform [-1, 1]
+    }
+
+    // Buffer source (looping)
+    this.bedSource = ctx.createBufferSource();
+    this.bedSource.buffer = buffer;
+    this.bedSource.loop = true;
+
+    // Low‑pass filter – heavy muffling for a distant roar
+    this.bedFilter = ctx.createBiquadFilter();
+    this.bedFilter.type = 'lowpass';
+    this.bedFilter.frequency.value = 450;   // Hz – deep rumble
+    this.bedFilter.Q.value = 0.7;
+
+    // Gain node (volume controlled by intensity)
+    this.bedGain = ctx.createGain();
+    this.bedGain.gain.value = 0;            // silent until needed
+
+    // Connect chain: source → filter → gain → master bus
+    this.bedSource.connect(this.bedFilter);
+    this.bedFilter.connect(this.bedGain);
+    this.bedGain.connect(this.masterDestination);
+
+    // Start looping immediately (will stay silent while gain is 0)
+    this.bedSource.start();
+  }
+
+  /**
+   * Updates bedGain based on current intensity.
+   * Intensity = globalPressure * localDensity.
+   * Mapping: < 0.2 → 0, then linear to 0.28 at 1.0.
+   */
+  _updateBedGain() {
+    if (!this.bedGain) return;
+    const intensity = this.globalPressure * this.localDensity;
+    // Ramp smoothly: start at threshold 0.2, max 0.28 (prevents overwhelming)
+    if (intensity < 0.18) {
+      this.bedGain.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + 0.02);
+    } else {
+      const t = Math.min(1, (intensity - 0.18) / 0.82); // 0→1 from 0.18→1.0
+      const target = t * 0.28;
+      this.bedGain.gain.linearRampToValueAtTime(target, this.audioCtx.currentTime + 0.05);
+    }
+  }
+
+  // -------------------------------------------------------------------
+  //  Layer 2: Stochastic Near‑Field Drops
+  // -------------------------------------------------------------------
+
+  /**
+   * Recursive drop scheduler using a Poisson‑distributed inter‑arrival time
+   * to prevent any rhythmic regularity.
+   * @param {number} intensity – current intensity (0‑1)
+   */
+  _scheduleNextDrop(intensity) {
+    if (this._isDestroyed) return;
+
+    // Poisson rate: max ~28 drops/sec at full intensity, minimum 2 drops/sec
+    const rate = 2 + intensity * 26;
+    // Exponential inter‑arrival time: -ln(1-U)/λ, U uniform [0,1)
+    const delaySec = -Math.log(1 - Math.random()) / rate;
+
+    // Spawn a single drop after the computed delay
+    this._dropTimeout = setTimeout(() => {
+      if (this._isDestroyed) return;
+      this._spawnDrop(intensity);          // the drop itself
+      this._scheduleNextDrop(intensity);   // schedule the next
+    }, delaySec * 1000);
+
+    this._allAuxTimeouts.push(this._dropTimeout);
+  }
+
+  /**
+   * Creates a single raindrop with full spatial depth processing.
+   * At high intensity, this layer focuses exclusively on near‑field
+   * crisp impacts; the bed covers the distant roar.
+   * @param {number} intensity – overall intensity (0‑1)
+   */
+  _spawnDrop(intensity) {
+    const ctx = this.audioCtx;
+    const now = ctx.currentTime;
+
+    // ── Distance determination ─────────────────────────────────────
+    let distance;
+    // At low intensity (< 0.3) we allow mid/far drops for sparse realism.
+    // At high intensity (≥ 0.7) we restrict to near‑field (0‑0.25) so they
+    // cut through the bed.
+    if (intensity < 0.3) {
+      distance = Math.random();                       // 0‑1 full range
+    } else if (intensity < 0.7) {
+      // Blend: near probability increases linearly
+      const nearProb = 0.3 + (intensity - 0.3) * 1.75; // 0.3→1.0
+      if (Math.random() < nearProb) {
+        distance = Math.random() * 0.25;             // near
+      } else {
+        distance = 0.25 + Math.random() * 0.75;      // mid‑far
+      }
+    } else {
+      // High intensity: almost exclusively near (0‑0.25)
+      distance = Math.random() * 0.25;
+    }
+
+    // ── Volume (inverse distance, but reduced when bed is active) ──
+    const baseVol = 1 - Math.pow(distance, 0.6);
+    // Global scaling: individual drops become quieter as intensity rises,
+    // because the bed fills the space. At intensity 1, drop volume ~60% of nominal.
+    const intensityScaling = 1 - intensity * 0.4;
+    let volume = baseVol * this.globalPressure * this.localDensity * 0.45 * intensityScaling;
+    volume = Math.max(0.005, Math.min(0.7, volume));
+
+    // ── Air Absorption & Distance EQ ──────────────────────────────
+    const nearFreq = 2200 + Math.random() * 4800;  // 2200‑7000 Hz
+    const farFreq  = 280 + Math.random() * 520;    // 280‑800 Hz
+    const freq = farFreq + (1 - distance) * (nearFreq - farFreq);
+    const Q = 0.15 + Math.random() * 1.35;        // gentle bandpass
+
+    // ── Panning (X‑axis) ──────────────────────────────────────────
+    const panValue = Math.random() * 2 - 1;        // -1 .. 1
+
+    // ── Drop Duration ─────────────────────────────────────────────
+    let dur = 0.055 + Math.random() * 0.175;       // 55‑230 ms
+    if (distance > 0.7) dur *= 0.8;
+
+    // ── Create audio graph for this drop ─────────────────────────
+    const buffer = this._createNoiseBuffer(dur, ctx.sampleRate);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = freq;
+    bandpass.Q.value = Q;
+
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = panValue;
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(volume, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    // Connect: source → bandpass → panner → gain → master bus
+    source.connect(bandpass);
+    bandpass.connect(panner);
+    panner.connect(gainNode);
+    gainNode.connect(this.masterDestination);
+
+    source.start(now);
+    source.stop(now + dur + 0.005);
+
+    // Automatic cleanup when the drop finishes
+    source.onended = () => {
+      source.disconnect();
+      bandpass.disconnect();
+      panner.disconnect();
+      gainNode.disconnect();
+    };
+  }
+
+  /**
+   * Generates a mono AudioBuffer of white noise with the given duration.
+   * @param {number} durationSec
+   * @param {number} sampleRate
+   * @returns {AudioBuffer}
+   */
+  _createNoiseBuffer(durationSec, sampleRate) {
+    const len = Math.max(1, Math.floor(sampleRate * durationSec));
+    const buffer = this.audioCtx.createBuffer(1, len, sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    return buffer;
+  }
+
+  // -------------------------------------------------------------------
+  //  Scheduler controls
+  // -------------------------------------------------------------------
+  /** Stops any pending drop timer and restarts with current intensity. */
+  _restartDropScheduler() {
+    this._stopDropScheduler();
+    if (!this._isDestroyed) {
+      const intensity = this.globalPressure * this.localDensity;
+      this._scheduleNextDrop(intensity);
+    }
+  }
+
+  _stopDropScheduler() {
+    if (this._dropTimeout) {
+      clearTimeout(this._dropTimeout);
+      this._dropTimeout = null;
+    }
+    // Clear any other stray timeouts (though we only keep one now)
+    this._allAuxTimeouts.forEach(id => clearTimeout(id));
+    this._allAuxTimeouts = [];
+  }
+
+  // -------------------------------------------------------------------
+  //  Public Lifecycle Methods
+  // -------------------------------------------------------------------
+
+  /**
+   * Updates internal state from the global Router Console.
+   * Immediately adjusts bed gain and re‑balances the drop scheduler.
    * @param {object} state – { atmosphericPressure, enclosure }
    */
   onWorldStateUpdate(state) {
@@ -85,17 +299,16 @@ export default class RainExpert {
     if (state.enclosure !== undefined) {
       this.enclosure = state.enclosure;
     }
-    // The scheduler will naturally pick up the new values on its next tick.
+    this._updateBedGain();
+    this._restartDropScheduler();
   }
 
   /**
-   * Returns a pure HTML string for the expert’s UI card.
-   * The card uses the global `.glass-card` class for the Symbiote frosted‑glass
-   * aesthetic and contains a density slider and a remove button.
+   * Returns the HTML string for the expert’s UI card.
+   * Identical aesthetic to the original, with a density slider and remove button.
    * @returns {string}
    */
   getUICard() {
-    // Inline styles are minimal; all main styling lives in index.html.
     return `
       <article class="expert-card glass-card" data-id="${this.id}">
         <h3 style="font-size:1rem; margin-bottom:12px; color:rgba(255,255,255,0.9); font-weight:600;">
@@ -137,207 +350,58 @@ export default class RainExpert {
   }
 
   /**
-   * Binds event listeners inside the card DOM element.
-   * The density slider triggers a scheduler restart so that the new density
-   * is immediately reflected in drop rate and balance.
-   * @param {HTMLElement} card – the root `<article>` element
+   * Binds the density slider and starts the two‑layer engine.
+   * Called by app.js after the card is injected.
+   * @param {HTMLElement} card – the root <article> element
    */
   bindCardControls(card) {
     if (!card) return;
     const slider = card.querySelector('.density-slider');
     if (!slider) {
-      console.warn('RainExpert: density-slider not found inside card');
+      console.warn('RainExpert: density-slider not found');
       return;
     }
 
     slider.addEventListener('input', (e) => {
       try {
         this.localDensity = parseFloat(e.target.value);
-        this._restartScheduler();
+        this._updateBedGain();
+        this._restartDropScheduler();
       } catch (err) {
         console.error('RainExpert density slider error:', err);
         alert('Error updating rain density: ' + err.message);
       }
     });
 
-    // After binding, kick off the rain scheduler for the first time.
-    this._startScheduler();
-  }
-
-  // -----------------------------------------------------------------------
-  //  Scheduler
-  // -----------------------------------------------------------------------
-
-  /**
-   * Stops any running scheduling loop and starts a fresh one.
-   * Call when density or pressure changes.
-   */
-  _restartScheduler() {
-    this._startScheduler();
-  }
-
-  _startScheduler() {
-    if (this._isDestroyed) return;
-    this._stopScheduler();
-    this._scheduleLoop();
-  }
-
-  _stopScheduler() {
-    if (this._scheduleTimeout) {
-      clearTimeout(this._scheduleTimeout);
-      this._scheduleTimeout = null;
-    }
-    // Clear any lingering auxiliary burst timeouts
-    this._auxTimeouts.forEach((id) => clearTimeout(id));
-    this._auxTimeouts = [];
+    // Initial kick‑off (bed is already running silent, and drops begin)
+    this._updateBedGain();
+    this._restartDropScheduler();
   }
 
   /**
-   * Main recursive loop. Calculates current intensity, spawns one primary drop
-   * with a distance bias, optionally adds a burst of extra far drops, then
-   * schedules the next cycle.
-   */
-  _scheduleLoop() {
-    if (this._isDestroyed) return;
-
-    const intensity = this.globalPressure * this.localDensity;
-    // Primary drop: distance bias shifts with intensity
-    this._spawnDrop(intensity, false);
-
-    // Burst of extra far‑field drops when intensity exceeds 0.6
-    if (intensity > 0.6) {
-      const burstCount = Math.floor((intensity - 0.5) * 5); // 0‑2 extra drops
-      for (let i = 0; i < burstCount; i++) {
-        const timeoutId = setTimeout(() => {
-          if (this._isDestroyed) return;
-          this._spawnDrop(1, true); // force far distance
-        }, Math.random() * 30);      // 0‑30 ms staggering
-        this._auxTimeouts.push(timeoutId);
-      }
-    }
-
-    // Dynamic interval: 250 ms base, shortened by intensity
-    const baseDelay = 0.25;          // seconds
-    const minDelay = 0.04;          // approx 25 drops/sec at max intensity
-    const delay = Math.max(minDelay, baseDelay * (1 - intensity * 0.85));
-
-    this._scheduleTimeout = setTimeout(() => this._scheduleLoop(), delay * 1000);
-  }
-
-  // -----------------------------------------------------------------------
-  //  Drop Synthesis (Depth of Field)
-  // -----------------------------------------------------------------------
-
-  /**
-   * Spawns a single raindrop with full spatial depth processing.
-   * @param {number} intensity – global intensity (used for distance bias)
-   * @param {boolean} forceFar – if true, distance is forced to 0.7 – 1.0
-   */
-  _spawnDrop(intensity = 1, forceFar = false) {
-    if (this._isDestroyed || !this.audioCtx) return;
-
-    const ctx = this.audioCtx;
-    const now = ctx.currentTime;
-
-    // ── Distance (0 = near, 1 = far) ────────────────────────────────
-    let distance;
-    if (forceFar) {
-      distance = 0.7 + Math.random() * 0.3;        // 0.7 – 1.0
-    } else {
-      // Probability of a near drop: higher when intensity is low,
-      // lower when intensity is high (to maintain crisp percussive strikes)
-      const nearProb = 0.4 * (1 - intensity) + 0.1; // 0.1 – 0.4
-      if (Math.random() < nearProb) {
-        distance = Math.random() * 0.3;             // 0.0 – 0.3
-      } else {
-        distance = 0.3 + Math.random() * 0.7;       // 0.3 – 1.0
-      }
-    }
-
-    // ── Volume (inverse distance law) ──────────────────────────────
-    // 1 at distance 0, approaching 0 at distance 1
-    const distanceVolume = 1 - Math.pow(distance, 0.6);
-    let volume = distanceVolume * this.globalPressure * this.localDensity * 0.5;
-    volume = Math.max(0.008, Math.min(0.8, volume)); // keep within safe bounds
-
-    // ── Air Absorption Bandpass ────────────────────────────────────
-    const nearFreq = 2000 + Math.random() * 4000; // 2000 – 6000 Hz
-    const farFreq = 300 + Math.random() * 500;    // 300 – 800 Hz
-    const freq = farFreq + (1 - distance) * (nearFreq - farFreq);
-    const Q = 0.15 + Math.random() * 1.35;        // 0.15 – 1.5
-
-    // ── Stereo Panning (X‑axis) ────────────────────────────────────
-    const panValue = Math.random() * 2 - 1;        // -1 (L) to +1 (R)
-
-    // ── Drop Duration ──────────────────────────────────────────────
-    let dur = 0.06 + Math.random() * 0.18;         // 60 – 240 ms
-    if (distance > 0.7) dur *= 0.8;                // far drops are shorter
-
-    // ── Noise Buffer ───────────────────────────────────────────────
-    const buffer = this._createNoiseBuffer(dur, ctx.sampleRate);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-
-    // ── Audio Graph ────────────────────────────────────────────────
-    const bandpass = ctx.createBiquadFilter();
-    bandpass.type = 'bandpass';
-    bandpass.frequency.value = freq;
-    bandpass.Q.value = Q;
-
-    const panner = ctx.createStereoPanner();
-    panner.pan.value = panValue;
-
-    const gainNode = ctx.createGain();
-    // Start at computed volume, then exponential decay to silence
-    gainNode.gain.setValueAtTime(volume, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-
-    // Connect chain: source → bandpass → panner → gain → master bus
-    source.connect(bandpass);
-    bandpass.connect(panner);
-    panner.connect(gainNode);
-    gainNode.connect(this.masterDestination);
-
-    // ── Playback & Automatic Cleanup ───────────────────────────────
-    source.start(now);
-    source.stop(now + dur + 0.01); // tiny padding to avoid clicks
-
-    // When the source finishes, disconnect all per‑drop nodes so they
-    // can be garbage collected.
-    source.onended = () => {
-      // It is safe to call disconnect even if already stopped.
-      source.disconnect();
-      bandpass.disconnect();
-      panner.disconnect();
-      gainNode.disconnect();
-    };
-  }
-
-  /**
-   * Creates an AudioBuffer filled with white noise of the given duration.
-   * @param {number} duration – in seconds
-   * @param {number} sampleRate
-   * @returns {AudioBuffer}
-   */
-  _createNoiseBuffer(duration, sampleRate) {
-    const length = Math.max(1, Math.floor(sampleRate * duration));
-    const buffer = this.audioCtx.createBuffer(1, length, sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < length; i++) {
-      data[i] = Math.random() * 2 - 1; // uniform distribution [-1, 1]
-    }
-    return buffer;
-  }
-
-  /**
-   * Stops all scheduling and disconnects any persistent resources.
-   * Afterwards the instance should be discarded.
+   * Tears down the entire expert: stops the bed, kills all timers,
+   * disconnects persistent audio nodes. After this call, the instance
+   * is no longer usable.
    */
   destroy() {
+    if (this._isDestroyed) return;
     this._isDestroyed = true;
-    this._stopScheduler();
-    // No persistent audio nodes owned by this class – all drops clean
-    // themselves up after playback. We simply cancel any pending timeouts.
+
+    // Stop and disconnect the continuous bed
+    if (this.bedSource) {
+      try { this.bedSource.stop(); } catch (e) { /* already stopped */ }
+      this.bedSource.disconnect();
+    }
+    if (this.bedFilter) {
+      this.bedFilter.disconnect();
+    }
+    if (this.bedGain) {
+      this.bedGain.disconnect();
+    }
+
+    // Clear all timeouts
+    this._stopDropScheduler();
+
     console.log(`RainExpert ${this.id}: destroyed`);
   }
 }
