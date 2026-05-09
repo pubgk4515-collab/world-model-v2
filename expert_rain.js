@@ -2,21 +2,17 @@
  * expert_rain.js
  * Procedural Acoustic World Simulator
  *
- * Rain-only engine built around precipitation density, not hiss.
+ * AAA architecture:
+ * - Pre-rendered buffer pooling
+ * - Pitch randomization ("19-20 difference")
+ * - Zero runtime filter math during playback
+ * - Density-driven scheduling
  *
- * Design rules:
- * - No wind synthesis
- * - No oscillators / FM sweeps
- * - No continuous noise bed
- * - No high-pass static
- * - Heavy rain emerges from many short water-impact events
- *
- * Core model:
- * - Intensity I = globalPressure * localDensity
- * - D(I) = target drops per second over a virtual 1m² field
- * - Near field (< 0.4 distance): individual drops only
- * - Far field (> 0.4 distance): clustered micro-impact buffers when density is high
- * - Scheduler runs every 100ms and plans the next 150ms of audio
+ * Rain-only engine:
+ * - no wind synthesis
+ * - no oscillators/FM sweeps
+ * - no live BiquadFilterNode creation during playback
+ * - all coloration baked into the buffer pool
  */
 
 export default class RainExpert {
@@ -26,6 +22,11 @@ export default class RainExpert {
     }
 
     this.audioCtx = audioCtx;
+
+    if (destinationNode && destinationNode.context && destinationNode.context !== audioCtx) {
+      throw new Error("RainExpert destinationNode must belong to the same AudioContext.");
+    }
+
     this.destination = destinationNode || audioCtx.destination;
 
     this.id =
@@ -34,37 +35,33 @@ export default class RainExpert {
 
     this.debug = !!options.debug;
 
-    // World state inputs
     this.globalPressure = this._clamp(options.globalPressure ?? 0.5, 0, 1);
     this.localDensity = this._clamp(options.localDensity ?? 0.5, 0, 1);
     this.enclosure = options.enclosure || "open";
 
-    // Lifecycle
     this._destroyed = false;
     this._started = false;
 
     // Scheduler
     this._scheduler = null;
-    this._lookahead = 0.15; // 150ms window
-    this._tickMs = 100; // setInterval every 100ms
+    this._tickMs = 100;
+    this._lookahead = 0.15; // schedule 150ms ahead
     this._scheduledUntil = 0;
 
-    // Residual accumulators for stable rate conversion
+    // Residuals for stable density conversion
     this._nearResidue = 0;
-    this._clusterResidue = 0;
     this._farResidue = 0;
 
-    // Active one-shot events for cleanup
+    // Active one-shot nodes for cleanup
     this._activeEvents = new Set();
 
-    // Small buffer caches to reduce repeated synthesis cost
-    this._dropBufferCache = new Map();     // key -> [AudioBuffer...]
-    this._clusterBufferCache = new Map();  // key -> [AudioBuffer...]
-    this._cacheVariantLimit = 6;
+    // Pre-baked pool buffers
+    this.nearPool = [];
+    this.farPool = [];
 
-    // Master output and safety limiter
+    // Master output chain
     this.outputGain = this.audioCtx.createGain();
-    this.outputGain.gain.value = 0.85;
+    this.outputGain.gain.value = 0.84;
 
     this.limiter = this.audioCtx.createDynamicsCompressor();
     this.limiter.threshold.value = -10;
@@ -75,6 +72,9 @@ export default class RainExpert {
 
     this.outputGain.connect(this.limiter);
     this.limiter.connect(this.destination);
+
+    // Pre-bake buffers once.
+    this._preBakePools();
 
     this._applyMasterTone(true);
   }
@@ -103,32 +103,48 @@ export default class RainExpert {
     return Math.floor(this._rand(min, max + 1));
   }
 
-  _poissonDelaySeconds(ratePerSecond) {
-    const rate = Math.max(0.2, ratePerSecond);
-    return -Math.log(1 - Math.random()) / rate;
-  }
-
   _lerp(a, b, t) {
     return a + (b - a) * t;
   }
 
-  _getIntensity() {
-    return this._clamp(this.globalPressure * this.localDensity, 0, 1);
+  _poissonDelaySeconds(ratePerSecond) {
+    const rate = Math.max(0.2, ratePerSecond);
+    return -Math.log(1 - Math.random()) / rate;
   }
 
   _bucketMs(valueMs, stepMs = 5) {
     return Math.max(stepMs, Math.round(valueMs / stepMs) * stepMs);
   }
 
-  _getCachedVariant(map, key, factory) {
+  _getIntensity() {
+    return this._clamp(this.globalPressure * this.localDensity, 0, 1);
+  }
+
+  _enclosureTone() {
+    switch (this.enclosure) {
+      case "umbrella":
+        return { cutoffMul: 0.92, gainMul: 0.94, densityMul: 0.96 };
+      case "indoor":
+        return { cutoffMul: 0.84, gainMul: 0.88, densityMul: 0.90 };
+      case "vehicle":
+        return { cutoffMul: 0.78, gainMul: 0.84, densityMul: 0.88 };
+      case "tunnel":
+        return { cutoffMul: 0.90, gainMul: 0.92, densityMul: 1.04 };
+      case "open":
+      default:
+        return { cutoffMul: 1.0, gainMul: 1.0, densityMul: 1.0 };
+    }
+  }
+
+  _normalizeBufferToPool(map, key, bufferFactory, maxVariants = 6) {
     let variants = map.get(key);
     if (!variants) {
       variants = [];
       map.set(key, variants);
     }
 
-    if (variants.length < this._cacheVariantLimit) {
-      const buffer = factory();
+    if (variants.length < maxVariants) {
+      const buffer = bufferFactory();
       variants.push(buffer);
       return buffer;
     }
@@ -137,7 +153,213 @@ export default class RainExpert {
   }
 
   /* ============================================================
-   * Public Lifecycle
+   * Pre-Bake Phase
+   * ========================================================== */
+
+  _preBakePools() {
+    const intensitySeedsNear = [
+      0.10, 0.14, 0.18, 0.22, 0.26,
+      0.30, 0.34, 0.38, 0.42, 0.46,
+      0.50, 0.56, 0.62, 0.70, 0.78,
+    ];
+
+    const intensitySeedsFar = [
+      0.35, 0.42, 0.48, 0.55, 0.62,
+      0.70, 0.78, 0.86, 0.92, 1.00,
+    ];
+
+    for (let i = 0; i < 15; i++) {
+      const seed = intensitySeedsNear[i % intensitySeedsNear.length];
+      this.nearPool.push(this._makeNearDropBuffer(seed, i));
+    }
+
+    for (let i = 0; i < 10; i++) {
+      const seed = intensitySeedsFar[i % intensitySeedsFar.length];
+      this.farPool.push(this._makeFarClusterBuffer(seed, i));
+    }
+
+    this._log(`Pre-baked ${this.nearPool.length} near buffers and ${this.farPool.length} far buffers.`);
+  }
+
+  /**
+   * Near-field drop:
+   * - soft attack
+   * - fast decay
+   * - no hiss bed
+   * - no runtime filtering
+   */
+  _makeNearDropBuffer(seed = 0.5, variantIndex = 0) {
+    const sr = this.audioCtx.sampleRate;
+    const dur = this._rand(0.035, 0.090) * this._lerp(0.88, 1.12, seed);
+    const length = Math.max(1, Math.floor(sr * dur));
+    const buffer = this.audioCtx.createBuffer(1, length, sr);
+    const data = buffer.getChannelData(0);
+
+    const attackMs = this._rand(8, 15);
+    const decayMs = this._rand(30, 80);
+    const attackSamples = Math.max(1, Math.floor((attackMs / 1000) * sr));
+    const decaySamples = Math.max(1, Math.floor((decayMs / 1000) * sr));
+
+    // Baked muffling via a simple one-pole lowpass in sample-gen.
+    const lp = this._clamp(this._lerp(0.08, 0.22, seed) + variantIndex * 0.003, 0.06, 0.26);
+    let low = 0;
+    let softClamp = 0;
+
+    // Slightly different transient shapes across variants.
+    const transientCount = this._randInt(1, 3);
+
+    const transientPositions = [];
+    for (let t = 0; t < transientCount; t++) {
+      transientPositions.push(
+        Math.floor(this._rand(0, length * this._lerp(0.08, 0.18, seed)))
+      );
+    }
+
+    for (let i = 0; i < length; i++) {
+      const white = this._rand(-1, 1);
+
+      // Attack / decay envelope.
+      let env;
+      if (i < attackSamples) {
+        env = i / attackSamples;
+      } else {
+        const d = i - attackSamples;
+        env = Math.exp(-d / decaySamples);
+      }
+
+      // Lowpass filter baked into the sample.
+      low += (white - low) * lp;
+
+      // Tiny, irregular transient snap to preserve "water hit" identity.
+      let snap = 0;
+      for (let p = 0; p < transientPositions.length; p++) {
+        const pos = transientPositions[p];
+        const dt = i - pos;
+        if (dt >= 0 && dt < 5) {
+          snap += (5 - dt) * 0.035;
+        }
+      }
+
+      // Soft shape: enough texture to read as water, not hiss.
+      const shaped = (low * 0.92 + white * 0.08 + snap) * env;
+
+      // Slight nonlinearity for wet impact feel.
+      softClamp = shaped * 1.3;
+      softClamp = softClamp / (1 + Math.abs(softClamp) * 0.45);
+
+      data[i] = softClamp * this._lerp(0.72, 1.0, seed);
+    }
+
+    return buffer;
+  }
+
+  /**
+   * Far-field cluster:
+   * - 3 to 5 rapid overlapping impact ticks baked into one buffer
+   * - darker / more diffuse than near drops
+   */
+  _makeFarClusterBuffer(seed = 0.7, variantIndex = 0) {
+    const sr = this.audioCtx.sampleRate;
+    const duration = this._rand(0.085, 0.165) * this._lerp(0.92, 1.12, seed);
+    const length = Math.max(1, Math.floor(sr * duration));
+    const buffer = this.audioCtx.createBuffer(1, length, sr);
+    const data = buffer.getChannelData(0);
+
+    const tickCount = this._clamp(this._randInt(3, 5), 3, 5);
+    const tickSpacing = duration / (tickCount + 1);
+
+    // Darker than near drops.
+    const lp = this._clamp(this._lerp(0.05, 0.16, seed) + variantIndex * 0.002, 0.04, 0.20);
+    let low = 0;
+
+    for (let tick = 0; tick < tickCount; tick++) {
+      const center = (tick + 1) * tickSpacing + this._rand(-0.006, 0.006);
+      const centerIdx = Math.max(0, Math.floor(center * sr));
+
+      const attackMs = this._rand(8, 15);
+      const decayMs = this._rand(30, 80);
+      const attackSamples = Math.max(1, Math.floor((attackMs / 1000) * sr));
+      const decaySamples = Math.max(1, Math.floor((decayMs / 1000) * sr));
+
+      const tickLength = Math.max(10, Math.floor((this._rand(0.018, 0.040) * sr)));
+      const tickGain = this._rand(0.55, 0.92) * this._lerp(0.82, 1.0, seed);
+
+      for (let i = 0; i < tickLength; i++) {
+        const idx = centerIdx + i;
+        if (idx >= length) break;
+
+        const white = this._rand(-1, 1);
+        low += (white - low) * lp;
+
+        let env;
+        if (i < attackSamples) {
+          env = i / attackSamples;
+        } else {
+          const d = i - attackSamples;
+          env = Math.exp(-d / decaySamples);
+        }
+
+        const wet = (low * 0.94 + white * 0.06) * env * tickGain;
+        data[idx] += wet;
+      }
+    }
+
+    // Gentle normalization.
+    for (let i = 0; i < length; i++) {
+      data[i] *= 0.9;
+    }
+
+    return buffer;
+  }
+
+  /* ============================================================
+   * Density Rules
+   * ========================================================== */
+
+  /**
+   * Returns target drops/sec across a virtual 1m² field.
+   * This hits the requested ranges:
+   * - light rain: 50..150
+   * - moderate rain: 300..500 around 0.5
+   * - heavy rain: 1000+
+   */
+  _dropRate(intensity) {
+    if (intensity <= 0.001) return 0;
+
+    if (intensity < 0.3) {
+      const t = intensity / 0.3;
+      return 50 + 100 * t; // 50..150
+    }
+
+    if (intensity < 0.6) {
+      const t = (intensity - 0.3) / 0.3;
+      return 150 + 350 * t; // 150..500
+    }
+
+    if (intensity < 0.8) {
+      const t = (intensity - 0.6) / 0.2;
+      return 500 + 500 * t; // 500..1000
+    }
+
+    const t = (intensity - 0.8) / 0.2;
+    return 1000 + 450 * Math.pow(t, 1.15); // 1000+
+  }
+
+  _nearShare(intensity) {
+    if (intensity < 0.3) return this._lerp(0.72, 0.54, intensity / 0.3);
+    if (intensity < 0.6) return this._lerp(0.54, 0.36, (intensity - 0.3) / 0.3);
+    if (intensity < 0.8) return this._lerp(0.36, 0.24, (intensity - 0.6) / 0.2);
+    return this._lerp(0.24, 0.18, (intensity - 0.8) / 0.2);
+  }
+
+  _clusterTickCount(intensity) {
+    if (intensity < 0.55) return 3;
+    if (intensity < 0.85) return 4;
+    return 5;
+  }
+
+  /* ============================================================
+   * Scheduler
    * ========================================================== */
 
   async start() {
@@ -153,7 +375,7 @@ export default class RainExpert {
     }
 
     this._scheduledUntil = this.audioCtx.currentTime;
-    this._scheduler = setInterval(() => this._pumpScheduler(), this._tickMs);
+    this._scheduler = setInterval(() => this._schedulerTick(), this._tickMs);
 
     this._applyMasterTone(true);
     this._log("Started");
@@ -170,32 +392,203 @@ export default class RainExpert {
     this._log("Stopped");
   }
 
-  destroy() {
-    if (this._destroyed) return;
-    this._destroyed = true;
+  _schedulerTick() {
+    if (this._destroyed || !this._started) return;
 
-    this.stop();
+    const now = this.audioCtx.currentTime;
+    const horizon = now + this._lookahead;
 
-    for (const ev of [...this._activeEvents]) {
-      this._cleanupEvent(ev);
-      try {
-        ev.source?.stop?.();
-      } catch (_) {}
+    if (this._scheduledUntil < now) {
+      this._scheduledUntil = now;
     }
 
+    while (this._scheduledUntil < horizon) {
+      const frameStart = this._scheduledUntil;
+      const frameEnd = Math.min(horizon, frameStart + this._lookahead);
+      const frameDur = Math.max(0, frameEnd - frameStart);
+
+      if (frameDur <= 0) break;
+
+      this._scheduleFrame(frameStart, frameDur);
+      this._scheduledUntil = frameEnd;
+    }
+  }
+
+  _scheduleFrame(frameStart, frameDur) {
+    const intensity = this._getIntensity();
+    const env = this._enclosureTone();
+    const totalRate = this._dropRate(intensity) * env.densityMul;
+
+    if (totalRate <= 0) return;
+
+    const nearShare = this._nearShare(intensity);
+    const nearRate = Math.min(150, totalRate * nearShare);
+
+    if (totalRate <= 200) {
+      // Low / moderate rain: use only near pool, individual drops.
+      const expectedNear = nearRate * frameDur + this._nearResidue;
+      const nearCount = Math.floor(expectedNear);
+      this._nearResidue = expectedNear - nearCount;
+
+      for (let i = 0; i < nearCount; i++) {
+        const t = frameStart + Math.random() * frameDur;
+        this._spawnDrop(t, {
+          kind: "near",
+          intensity,
+          totalRate,
+          env,
+        });
+      }
+
+      return;
+    }
+
+    // Heavy rain:
+    // keep near field discrete (max ~150/sec), and push the rest into far clusters.
+    const farDropsEquivalent = Math.max(0, totalRate - nearRate);
+    const clusterSize = this._clusterTickCount(intensity);
+
+    const expectedNear = nearRate * frameDur + this._nearResidue;
+    const expectedCluster = (farDropsEquivalent / clusterSize) * frameDur + this._farResidue;
+
+    const nearCount = Math.floor(expectedNear);
+    const clusterCount = Math.floor(expectedCluster);
+
+    this._nearResidue = expectedNear - nearCount;
+    this._farResidue = expectedCluster - clusterCount;
+
+    for (let i = 0; i < nearCount; i++) {
+      const t = frameStart + Math.random() * frameDur;
+      this._spawnDrop(t, {
+        kind: "near",
+        intensity,
+        totalRate,
+        env,
+      });
+    }
+
+    for (let i = 0; i < clusterCount; i++) {
+      const t = frameStart + Math.random() * frameDur;
+      this._spawnDrop(t, {
+        kind: "far",
+        intensity,
+        totalRate,
+        env,
+        clusterSize,
+      });
+    }
+  }
+
+  /* ============================================================
+   * Playback
+   * ========================================================== */
+
+  _spawnDrop(startTime, { kind, intensity, totalRate, env }) {
+    const ctx = this.audioCtx;
+
+    const pool = kind === "near" ? this.nearPool : this.farPool;
+    if (!pool.length) return;
+
+    const buffer = pool[(Math.random() * pool.length) | 0];
+    if (!buffer) return;
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    // The "19-20 difference"
+    source.playbackRate.value = this._clamp(this._rand(0.92, 1.08), 0.82, 1.18);
+
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = this._clamp(this._rand(-1, 1), -1, 1);
+
+    const gain = ctx.createGain();
+
+    // Keep overall level stable; density is the perceptual driver.
+    const densityComp = 1 / Math.sqrt(1 + totalRate / 240);
+
+    const baseGain =
+      kind === "near"
+        ? this._rand(0.026, 0.11)
+        : this._rand(0.016, 0.075);
+
+    const intensityGain = 0.50 + intensity * 0.50;
+
+    let finalGain = baseGain * densityComp * intensityGain * env.gainMul;
+    finalGain = this._clamp(finalGain, 0.0015, 0.16);
+
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.linearRampToValueAtTime(finalGain, startTime + this._rand(0.002, 0.006));
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + this._getBufferDuration(buffer, kind));
+
+    source.connect(panner);
+    panner.connect(gain);
+    gain.connect(this.outputGain);
+
+    const event = {
+      source,
+      panner,
+      gain,
+      cleaned: false,
+    };
+
+    this._activeEvents.add(event);
+
+    source.onended = () => {
+      this._cleanupEvent(event);
+    };
+
     try {
-      this.outputGain.disconnect();
+      source.start(startTime);
+      source.stop(startTime + this._getBufferDuration(buffer, kind) + 0.02);
+    } catch (err) {
+      this._warn("Drop playback failed:", err);
+      this._cleanupEvent(event);
+    }
+  }
+
+  _getBufferDuration(buffer, kind) {
+    if (!buffer) return kind === "near" ? 0.08 : 0.12;
+    // duration in seconds from AudioBuffer
+    return Math.max(0.03, Math.min(buffer.duration || 0.12, kind === "near" ? 0.14 : 0.18));
+  }
+
+  _cleanupEvent(event) {
+    if (!event || event.cleaned) return;
+    event.cleaned = true;
+
+    try {
+      event.source?.disconnect?.();
     } catch (_) {}
 
     try {
-      this.limiter.disconnect();
+      event.panner?.disconnect?.();
     } catch (_) {}
 
-    this._activeEvents.clear();
-    this._dropBufferCache.clear();
-    this._clusterBufferCache.clear();
+    try {
+      event.gain?.disconnect?.();
+    } catch (_) {}
 
-    this._log(`Destroyed ${this.id}`);
+    this._activeEvents.delete(event);
+  }
+
+  /* ============================================================
+   * Tone / Master
+   * ========================================================== */
+
+  _applyMasterTone(smooth = false) {
+    const intensity = this._getIntensity();
+    const env = this._enclosureTone();
+    const now = this.audioCtx.currentTime;
+    const tc = smooth ? 0.08 : 0.05;
+
+    // No runtime filtering during playback. This only shapes the master loudness.
+    const targetGain = this._clamp(
+      0.82 * env.gainMul + intensity * 0.04,
+      0.55,
+      0.92
+    );
+
+    this.outputGain.gain.setTargetAtTime(targetGain, now, tc);
   }
 
   /* ============================================================
@@ -224,498 +617,6 @@ export default class RainExpert {
     }
 
     this._applyMasterTone(true);
-  }
-
-  /* ============================================================
-   * Rain Physics
-   * ========================================================== */
-
-  /**
-   * Drops/sec over a virtual 1m² field.
-   * Piecewise mapping to satisfy the requested density ranges.
-   */
-  _dropRate(intensity) {
-    if (intensity <= 0.001) return 0;
-
-    if (intensity < 0.3) {
-      const t = intensity / 0.3;
-      return 50 + 100 * t; // 50..150
-    }
-
-    if (intensity < 0.6) {
-      const t = (intensity - 0.3) / 0.3;
-      return 150 + 300 * t; // 150..450
-    }
-
-    if (intensity < 0.8) {
-      const t = (intensity - 0.6) / 0.2;
-      return 450 + 550 * t; // 450..1000
-    }
-
-    const t = (intensity - 0.8) / 0.2;
-    return 1000 + 450 * Math.pow(t, 1.2); // 1000..1450+
-  }
-
-  /**
-   * Near-field share decreases as density rises.
-   * Heavy rain should mostly become far-field clustered texture.
-   */
-  _nearShare(intensity) {
-    if (intensity < 0.3) {
-      return this._lerp(0.68, 0.50, intensity / 0.3);
-    }
-
-    if (intensity < 0.6) {
-      return this._lerp(0.50, 0.32, (intensity - 0.3) / 0.3);
-    }
-
-    if (intensity < 0.8) {
-      return this._lerp(0.32, 0.23, (intensity - 0.6) / 0.2);
-    }
-
-    return this._lerp(0.23, 0.17, (intensity - 0.8) / 0.2);
-  }
-
-  _clusterTickCount(intensity) {
-    if (intensity < 0.55) return 3;
-    if (intensity < 0.85) return 4;
-    return 5;
-  }
-
-  _enclosureTone() {
-    switch (this.enclosure) {
-      case "umbrella":
-        return { cutoffMul: 0.86, gainMul: 0.90, decayMul: 1.02 };
-      case "indoor":
-        return { cutoffMul: 0.72, gainMul: 0.80, decayMul: 1.06 };
-      case "vehicle":
-        return { cutoffMul: 0.65, gainMul: 0.75, decayMul: 1.04 };
-      case "tunnel":
-        return { cutoffMul: 0.82, gainMul: 0.86, decayMul: 1.08 };
-      case "open":
-      default:
-        return { cutoffMul: 1.0, gainMul: 1.0, decayMul: 1.0 };
-    }
-  }
-
-  _applyMasterTone(smooth = false) {
-    const intensity = this._getIntensity();
-    const env = this._enclosureTone();
-    const now = this.audioCtx.currentTime;
-    const tc = smooth ? 0.08 : 0.05;
-
-    // Rain should not become louder just because it gets denser.
-    // Density is controlled by event count; output gain stays fairly stable.
-    const targetGain = this._clamp(
-      0.84 * env.gainMul + intensity * 0.02,
-      0.55,
-      0.92
-    );
-
-    this.outputGain.gain.setTargetAtTime(targetGain, now, tc);
-  }
-
-  _pumpScheduler() {
-    if (this._destroyed || !this._started) return;
-
-    const now = this.audioCtx.currentTime;
-    const horizon = now + this._lookahead;
-
-    if (this._scheduledUntil < now) {
-      this._scheduledUntil = now;
-    }
-
-    if (this._scheduledUntil >= horizon) return;
-
-    const frameStart = this._scheduledUntil;
-    const frameDur = horizon - frameStart;
-
-    if (frameDur <= 0) return;
-
-    this._scheduleFrame(frameStart, frameDur);
-    this._scheduledUntil = horizon;
-  }
-
-  _scheduleFrame(frameStart, frameDur) {
-    const intensity = this._getIntensity();
-    const totalRate = this._dropRate(intensity);
-
-    if (totalRate <= 0) return;
-
-    const nearShare = this._nearShare(intensity);
-
-    if (totalRate <= 200) {
-      // Low / moderate rain:
-      // all events are individual drops, split between near and far strata.
-      const nearRate = Math.min(150, totalRate * nearShare);
-      const farRate = Math.max(0, totalRate - nearRate);
-
-      const nearExpected = nearRate * frameDur + this._nearResidue;
-      const farExpected = farRate * frameDur + this._farResidue;
-
-      const nearCount = Math.floor(nearExpected);
-      const farCount = Math.floor(farExpected);
-
-      this._nearResidue = nearExpected - nearCount;
-      this._farResidue = farExpected - farCount;
-
-      for (let i = 0; i < nearCount; i++) {
-        const t = frameStart + Math.random() * frameDur;
-        this._spawnIndividualDrop(t, {
-          intensity,
-          totalRate,
-          distance: Math.random() * 0.4,
-          near: true,
-        });
-      }
-
-      for (let i = 0; i < farCount; i++) {
-        const t = frameStart + Math.random() * frameDur;
-        this._spawnIndividualDrop(t, {
-          intensity,
-          totalRate,
-          distance: 0.4 + Math.random() * 0.6,
-          near: false,
-        });
-      }
-
-      return;
-    }
-
-    // Heavy rain:
-    // near field remains discrete (max ~150/sec),
-    // far field becomes cluster-based to simulate massive density safely.
-    const nearRate = Math.min(150, totalRate * nearShare);
-    const farEquivalentRate = Math.max(0, totalRate - nearRate);
-    const clusterSize = this._clusterTickCount(intensity);
-    const clusterRate = farEquivalentRate / clusterSize;
-
-    const nearExpected = nearRate * frameDur + this._nearResidue;
-    const clusterExpected = clusterRate * frameDur + this._clusterResidue;
-
-    const nearCount = Math.floor(nearExpected);
-    const clusterCount = Math.floor(clusterExpected);
-
-    this._nearResidue = nearExpected - nearCount;
-    this._clusterResidue = clusterExpected - clusterCount;
-
-    // Near-field: discrete drops only.
-    for (let i = 0; i < nearCount; i++) {
-      const t = frameStart + Math.random() * frameDur;
-      this._spawnIndividualDrop(t, {
-        intensity,
-        totalRate,
-        distance: Math.random() * 0.4,
-        near: true,
-      });
-    }
-
-    // Far-field: clustered micro-impact buffers.
-    for (let i = 0; i < clusterCount; i++) {
-      const t = frameStart + Math.random() * frameDur;
-      this._spawnCluster(t, {
-        intensity,
-        totalRate,
-        distance: 0.4 + Math.random() * 0.6,
-        clusterSize,
-      });
-    }
-  }
-
-  /* ============================================================
-   * Individual Drops
-   * ========================================================== */
-
-  _spawnIndividualDrop(startTime, { intensity, totalRate, distance, near }) {
-    const ctx = this.audioCtx;
-    const env = this._enclosureTone();
-
-    // Ideal drop envelope:
-    // attack 8-15ms, decay 30-80ms
-    const attack = this._rand(0.008, 0.015);
-    const decay = this._rand(0.03, 0.08) * env.decayMul;
-    const duration = attack + decay + this._rand(0.005, 0.015);
-
-    // Buffer is a shaped white-noise burst.
-    const buffer = this._getDropBuffer(duration, near ? "near" : "far");
-
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.playbackRate.value = this._clamp(this._rand(0.96, 1.04), 0.9, 1.1);
-
-    const lowpass = ctx.createBiquadFilter();
-    lowpass.type = "lowpass";
-
-    // Randomized surface filter in the requested 800Hz..2000Hz band.
-    const distT = this._clamp(distance, 0, 1);
-    const baseCut = this._lerp(2000, 800, distT);
-    const modCut = baseCut * this._rand(0.9, 1.1) * env.cutoffMul;
-    lowpass.frequency.value = this._clamp(modCut, 800, 2000);
-    lowpass.Q.value = this._rand(0.55, 0.92);
-
-    const panner = ctx.createStereoPanner();
-    panner.pan.value = this._clamp(this._rand(-1, 1), -1, 1);
-
-    const gain = ctx.createGain();
-
-    // Density scaling: more rain => more nodes, but each node slightly quieter.
-    const densityComp = 1 / Math.sqrt(1 + totalRate / 220);
-    const distanceComp = this._clamp(1 - distT * 0.68, 0.25, 1.0);
-
-    const peak =
-      (near ? this._rand(0.028, 0.11) : this._rand(0.018, 0.075)) *
-      densityComp *
-      distanceComp *
-      (0.55 + intensity * 0.45) *
-      env.gainMul;
-
-    const finalPeak = this._clamp(peak, 0.0025, 0.18);
-
-    gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.linearRampToValueAtTime(finalPeak, startTime + attack);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-    source.connect(lowpass);
-    lowpass.connect(panner);
-    panner.connect(gain);
-    gain.connect(this.outputGain);
-
-    const event = {
-      source,
-      lowpass,
-      panner,
-      gain,
-      cleaned: false,
-    };
-
-    this._activeEvents.add(event);
-
-    source.onended = () => {
-      this._cleanupEvent(event);
-    };
-
-    source.start(startTime);
-    source.stop(startTime + duration + 0.02);
-  }
-
-  /* ============================================================
-   * Far-Field Cluster
-   * ========================================================== */
-
-  _spawnCluster(startTime, { intensity, totalRate, distance, clusterSize }) {
-    const ctx = this.audioCtx;
-    const env = this._enclosureTone();
-
-    // A cluster node should still feel like rain,
-    // not like a machine-gun or hiss.
-    const ticks = this._clusterTickCount(intensity);
-    const attack = this._rand(0.008, 0.015);
-    const decay = this._rand(0.03, 0.08) * env.decayMul;
-    const duration = this._clamp(attack + decay + this._rand(0.008, 0.02), 0.045, 0.14);
-
-    const buffer = this._getClusterBuffer(duration, ticks, intensity);
-
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.playbackRate.value = this._clamp(this._rand(0.98, 1.03), 0.9, 1.1);
-
-    const lowpass = ctx.createBiquadFilter();
-    lowpass.type = "lowpass";
-
-    // Far-field clusters are darker and softer than near drops.
-    const baseCut = this._lerp(1600, 900, this._clamp(intensity, 0, 1));
-    const modCut = baseCut * this._rand(0.85, 1.0) * env.cutoffMul;
-    lowpass.frequency.value = this._clamp(modCut, 800, 2000);
-    lowpass.Q.value = this._rand(0.5, 0.82);
-
-    const panner = ctx.createStereoPanner();
-    panner.pan.value = this._clamp(this._rand(-1, 1), -1, 1);
-
-    const gain = ctx.createGain();
-
-    const densityComp = 1 / Math.sqrt(1 + totalRate / 220);
-    const clusterStrength = this._clamp(0.018 + intensity * 0.07, 0.015, 0.11);
-
-    // A cluster node represents 3-5 rapid impact ticks,
-    // so its audible peak can be slightly stronger than a single drop,
-    // but still safely controlled.
-    const finalPeak = this._clamp(
-      clusterStrength *
-        densityComp *
-        (0.78 + ticks * 0.08) *
-        this._rand(0.82, 1.18) *
-        env.gainMul,
-      0.002,
-      0.14
-    );
-
-    gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.linearRampToValueAtTime(finalPeak, startTime + attack);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-    source.connect(lowpass);
-    lowpass.connect(panner);
-    panner.connect(gain);
-    gain.connect(this.outputGain);
-
-    const event = {
-      source,
-      lowpass,
-      panner,
-      gain,
-      cleaned: false,
-    };
-
-    this._activeEvents.add(event);
-
-    source.onended = () => {
-      this._cleanupEvent(event);
-    };
-
-    source.start(startTime);
-    source.stop(startTime + duration + 0.02);
-  }
-
-  _cleanupEvent(event) {
-    if (!event || event.cleaned) return;
-    event.cleaned = true;
-
-    try {
-      event.source?.disconnect?.();
-    } catch (_) {}
-
-    try {
-      event.lowpass?.disconnect?.();
-    } catch (_) {}
-
-    try {
-      event.panner?.disconnect?.();
-    } catch (_) {}
-
-    try {
-      event.gain?.disconnect?.();
-    } catch (_) {}
-
-    this._activeEvents.delete(event);
-  }
-
-  /* ============================================================
-   * Buffer Synthesis
-   * ========================================================== */
-
-  _getDropBuffer(duration, kind = "near") {
-    const durMs = this._bucketMs(duration * 1000, 5);
-    const key = `drop:${kind}:${durMs}`;
-
-    return this._getCachedVariant(this._dropBufferCache, key, () =>
-      this._makeDropBuffer(durMs / 1000, kind)
-    );
-  }
-
-  _getClusterBuffer(duration, ticks, intensity) {
-    const durMs = this._bucketMs(duration * 1000, 10);
-    const key = `cluster:${durMs}:${ticks}:${Math.round(intensity * 4)}`;
-
-    return this._getCachedVariant(this._clusterBufferCache, key, () =>
-      this._makeClusterBuffer(durMs / 1000, ticks, intensity)
-    );
-  }
-
-  _makeDropBuffer(durationSec, kind) {
-    const sr = this.audioCtx.sampleRate;
-    const length = Math.max(1, Math.floor(sr * durationSec));
-    const buffer = this.audioCtx.createBuffer(1, length, sr);
-    const data = buffer.getChannelData(0);
-
-    // Slightly different smoothing for near vs far to avoid identical texture.
-    const smoothing =
-      kind === "near" ? 0.935 : kind === "far" ? 0.96 : 0.95;
-
-    const attackSec = this._clamp(durationSec * 0.18, 0.008, 0.015);
-    const decaySec = this._clamp(durationSec * 0.62, 0.03, 0.08);
-
-    const attackSamples = Math.max(1, Math.floor(attackSec * sr));
-    const decaySamples = Math.max(1, Math.floor(decaySec * sr));
-
-    let state = this._rand(-1, 1);
-    const amp = kind === "near" ? 0.9 : 0.78;
-
-    for (let i = 0; i < length; i++) {
-      const white = this._rand(-1, 1);
-      state = state * smoothing + white * (1 - smoothing);
-
-      let env;
-      if (i < attackSamples) {
-        env = i / attackSamples;
-      } else {
-        const d = i - attackSamples;
-        env = Math.exp(-d / decaySamples);
-      }
-
-      // Slight curvature to keep it wet and not plasticky.
-      const curve = Math.pow(env, 0.92);
-
-      data[i] = state * curve * amp;
-    }
-
-    return buffer;
-  }
-
-  _makeClusterBuffer(durationSec, ticks, intensity) {
-    const sr = this.audioCtx.sampleRate;
-    const length = Math.max(1, Math.floor(sr * durationSec));
-    const buffer = this.audioCtx.createBuffer(1, length, sr);
-    const data = buffer.getChannelData(0);
-
-    // Cluster is a handful of rapid impacts that merge perceptually.
-    // 3-5 ticks is enough to imply far-field density without node explosion.
-    const spacing = durationSec / (ticks + 1);
-    const clusterScale = this._clamp(0.85 / Math.max(1, ticks), 0.12, 0.28);
-
-    for (let t = 0; t < ticks; t++) {
-      const center = (t + 1) * spacing + this._rand(-0.004, 0.004);
-      const start = Math.max(0, Math.floor(center * sr));
-
-      const tickDuration = this._clamp(
-        this._rand(0.006, 0.018) + intensity * 0.004,
-        0.006,
-        0.022
-      );
-
-      const tickLength = Math.max(8, Math.floor(tickDuration * sr));
-      const tickAttack = Math.max(1, Math.floor(this._rand(0.002, 0.0045) * sr));
-      const tickDecay = Math.max(1, Math.floor(this._rand(0.008, 0.018) * sr));
-
-      let state = this._rand(-1, 1);
-      const smoothing = this._rand(0.91, 0.96);
-      const tickAmp = clusterScale * this._rand(0.75, 1.2);
-
-      for (let i = 0; i < tickLength; i++) {
-        const idx = start + i;
-        if (idx >= length) break;
-
-        const white = this._rand(-1, 1);
-        state = state * smoothing + white * (1 - smoothing);
-
-        let env;
-        if (i < tickAttack) {
-          env = i / tickAttack;
-        } else {
-          const d = i - tickAttack;
-          env = Math.exp(-d / tickDecay);
-        }
-
-        const curve = Math.pow(env, 0.9);
-        data[idx] += state * curve * tickAmp;
-      }
-    }
-
-    // Extra low-level normalization so cluster buffers do not spike.
-    for (let i = 0; i < length; i++) {
-      data[i] *= 0.92;
-    }
-
-    return buffer;
   }
 
   /* ============================================================
@@ -786,5 +687,37 @@ export default class RainExpert {
 
     this._applyMasterTone(true);
     this.start().catch((err) => this._warn("Start failed:", err));
+  }
+
+  /* ============================================================
+   * Destroy
+   * ========================================================== */
+
+  destroy() {
+    if (this._destroyed) return;
+    this._destroyed = true;
+
+    this.stop();
+
+    for (const ev of [...this._activeEvents]) {
+      this._cleanupEvent(ev);
+      try {
+        ev.source?.stop?.();
+      } catch (_) {}
+    }
+
+    try {
+      this.outputGain.disconnect();
+    } catch (_) {}
+
+    try {
+      this.limiter.disconnect();
+    } catch (_) {}
+
+    this.nearPool.length = 0;
+    this.farPool.length = 0;
+    this._activeEvents.clear();
+
+    this._log(`Destroyed ${this.id}`);
   }
 }
