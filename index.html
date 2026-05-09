@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Symbiote Studio · MoE World Model</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Reset & base */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #030303;
+      color: #fff;
+      overflow-x: hidden;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none;  /* IE/Edge */
+    }
+
+    body::-webkit-scrollbar {
+      display: none; /* Chrome/Safari */
+    }
+
+    /* Deep dark background orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(140px);
+      pointer-events: none;
+      z-index: 0;
+      will-change: transform, opacity;
+    }
+
+    .orb--violet {
+      width: 80vw;
+      height: 80vw;
+      max-width: 600px;
+      max-height: 600px;
+      background: #6d28d9;
+      top: -20vh;
+      left: -10vw;
+      animation: pulseViolet 8s ease-in-out infinite alternate;
+      opacity: 0.55;
+    }
+
+    .orb--cobalt {
+      width: 90vw;
+      height: 90vw;
+      max-width: 700px;
+      max-height: 700px;
+      background: #1e40af;
+      bottom: -15vh;
+      right: -15vw;
+      animation: pulseCobalt 10s ease-in-out infinite alternate-reverse;
+      opacity: 0.5;
+    }
+
+    @keyframes pulseViolet {
+      0% { transform: scale(1) translate(0, 0); opacity: 0.45; }
+      100% { transform: scale(1.12) translate(-3%, 2%); opacity: 0.65; }
+    }
+
+    @keyframes pulseCobalt {
+      0% { transform: scale(1) translate(0, 0); opacity: 0.4; }
+      100% { transform: scale(1.15) translate(5%, -4%); opacity: 0.6; }
+    }
+
+    /* App layout */
+    .app-container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-height: 100dvh; /* dynamic viewport for mobile */
+      padding-bottom: 90px; /* space for bottom dock */
+    }
+
+    /* Glassmorphism card base */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 24px;
+      padding: 20px;
+      margin: 0 16px 16px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      padding: 32px 16px 20px;
+    }
+
+    .app-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.95);
+      letter-spacing: -0.02em;
+    }
+
+    .app-subtitle {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 4px;
+    }
+
+    /* Router console */
+    #routerConsole {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .console-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.5);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    /* Custom select */
+    .custom-select-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 1rem;
+      color: rgba(255, 255, 255, 0.9);
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      outline: none;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    select option {
+      background: #1a1a1a;
+      color: #fff;
+    }
+
+    .select-arrow {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      width: 12px;
+      height: 12px;
+      border-left: 2px solid rgba(255,255,255,0.4);
+      border-bottom: 2px solid rgba(255,255,255,0.4);
+      transform: translateY(-70%) rotate(-45deg);
+    }
+
+    /* Pressure slider */
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      outline: none;
+      margin: 8px 0;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      background: white;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(255,255,255,0.3);
+      border: 2px solid rgba(255,255,255,0.2);
+    }
+
+    input[type=range]::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      background: white;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid rgba(255,255,255,0.2);
+    }
+
+    .slider-value-indicator {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.5);
+      text-align: right;
+    }
+
+    /* Expert Rack – completely empty by design */
+    #expertRack {
+      flex: 1;
+      min-height: 200px;
+      /* no content – will be filled by JavaScript */
+    }
+
+    /* Bottom Dock */
+    .bottom-dock {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      padding: 12px 16px 20px;
+      background: linear-gradient(to top, rgba(3,3,3,0.95) 60%, rgba(3,3,3,0));
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      justify-content: center;
+    }
+
+    #addLayerBtn {
+      width: 100%;
+      max-width: 380px;
+      padding: 18px 24px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      color: rgba(255,255,255,0.9);
+      font-size: 1.1rem;
+      font-weight: 600;
+      font-family: inherit;
+      letter-spacing: -0.01em;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      cursor: pointer;
+      transition: background 0.2s ease;
+      outline: none;
+    }
+
+    #addLayerBtn:active {
+      background: rgba(255,255,255,0.1);
+    }
+
+    /* Bottom Sheet Modal (hidden by default) */
+    #layerModal {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 20;
+      background: rgba(20, 20, 30, 0.7);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      border-radius: 28px 28px 0 0;
+      padding: 16px 20px 32px;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 -10px 40px rgba(0,0,0,0.7);
+    }
+
+    /* This class will be toggled by JS later */
+    #layerModal.active {
+      transform: translateY(0);
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 4px;
+      margin: 0 auto 16px;
+    }
+
+    .sheet-btn {
+      width: 100%;
+      padding: 16px 20px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      color: rgba(255,255,255,0.9);
+      font-size: 1rem;
+      font-weight: 500;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.2s;
+      outline: none;
+    }
+
+    .sheet-btn:active {
+      background: rgba(255,255,255,0.1);
+    }
+
+    #injectCodeBtn {
+      color: #a78bfa;
+      border-color: rgba(167, 139, 250, 0.3);
+      background: rgba(167, 139, 250, 0.08);
+    }
+
+    #injectCodeBtn:active {
+      background: rgba(167, 139, 250, 0.18);
+    }
+
+    /* Utility */
+    .flex-spacer {
+      flex: 1;
+    }
+  </style>
+
+  <!-- Eruda mobile debugging console -->
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script>
+</head>
+<body>
+  <!-- Pulsing background orbs -->
+  <div class="orb orb--violet"></div>
+  <div class="orb orb--cobalt"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <h1 class="app-title">Symbiote Studio</h1>
+      <p class="app-subtitle">MoE World Model</p>
+    </header>
+
+    <!-- Global Router Console -->
+    <section id="routerConsole" class="glass-card">
+      <div>
+        <label class="console-label">Enclosure</label>
+        <div class="custom-select-wrapper">
+          <select id="enclosureSelect">
+            <option value="open">Open</option>
+            <option value="umbrella">Umbrella</option>
+            <option value="indoor">Indoor</option>
+          </select>
+          <span class="select-arrow"></span>
+        </div>
+      </div>
+      <div class="slider-group">
+        <label class="console-label">Atmospheric Pressure</label>
+        <input type="range" id="pressureSlider" min="0" max="1" step="0.01" value="0.5">
+        <div class="slider-value-indicator">0.50</div>
+      </div>
+    </section>
+
+    <!-- Expert Rack (empty, to be populated dynamically) -->
+    <section id="expertRack">
+      <!-- Intentional empty container – no dummy content -->
+    </section>
+
+    <!-- Spacer so content isn't hidden behind fixed bottom dock -->
+    <div class="flex-spacer"></div>
+  </div>
+
+  <!-- Fixed Bottom Dock -->
+  <div class="bottom-dock">
+    <button id="addLayerBtn">Add Acoustic Expert</button>
+  </div>
+
+  <!-- Bottom Sheet Modal (hidden) -->
+  <div id="layerModal">
+    <div class="sheet-handle"></div>
+    <button class="sheet-btn" data-expert="rain">Atmosphere · Rain</button>
+    <!-- Additional modules will be injected by JS -->
+    <button class="sheet-btn" id="injectCodeBtn" style="color: #a78bfa;">Custom · Paste Expert Code</button>
+  </div>
+
+  <!-- Future engine script (no logic yet) -->
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
