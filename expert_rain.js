@@ -235,7 +235,7 @@ export default class RainExpert {
    *
    * @param {number} startTime – exact AudioContext time for the drop
    */
-    _spawnDrop(startTime) {
+      _spawnDrop(startTime) {
     const ctx = this.audioCtx;
 
     // ── Spatial Parameters ──────────────────────────────────────────
@@ -244,11 +244,11 @@ export default class RainExpert {
 
     // ── Volume scaling ──────────────────────────────────────────────
     let volume = (1 - distance) * this.globalPressure * this.localDensity * 0.45;
-    volume = Math.max(0.005, Math.min(0.75, volume));
+    volume = Math.max(0.005, Math.min(0.70, volume)); // Thoda headroom rakha to avoid distortion
 
-    // ── TWEAK 2: Slower Attack (Wet Splash, Less Snap) ──────────────
-    const attackTime = 0.004 + Math.random() * 0.006;     // 4–10 ms (No more instant 1ms tick)
-    const decayTime  = 0.020 + Math.random() * 0.040;     // 20–60 ms
+    // ── The "Goldilocks" Envelope (Natural Water Patter) ────────────
+    const attackTime = 0.002 + Math.random() * 0.003;     // 2–5 ms (Fast enough for a tap, slow enough to not click)
+    const decayTime  = 0.030 + Math.random() * 0.050;     // 30–80 ms (Natural absorption)
     const attackEnd  = startTime + attackTime;
     const decayEnd   = attackEnd + decayTime;
 
@@ -262,25 +262,26 @@ export default class RainExpert {
     dropGain.gain.linearRampToValueAtTime(volume, attackEnd);
     dropGain.gain.exponentialRampToValueAtTime(0.0001, decayEnd);
 
-    // ── TWEAK 3: Resonant Wetness (Lower Frequency Band) ────────────
-    const bandpass = ctx.createBiquadFilter();
-    bandpass.type = 'bandpass';
-    bandpass.frequency.value = 400 + Math.random() * 1800; // Shifted down: 400Hz–2200Hz
-    bandpass.Q.value = 0.2 + Math.random() * 0.3;
-
-    // ── TWEAK 1: Lowpass Muffling (Killing the harsh treble) ────────
+    // ── Filter 1: Lowpass (Kills the Kurkure Hiss) ──────────────────
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = 'lowpass';
-    lowpass.frequency.value = 2500 + Math.random() * 1000; // Cut off anything above ~3000Hz
+    lowpass.frequency.value = 3500 + Math.random() * 2000; // 3500Hz - 5500Hz
+    lowpass.Q.value = 0.5;
+
+    // ── Filter 2: Highpass (Kills the Muffled Mud/Distortion) ───────
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = 300 + Math.random() * 300;  // 300Hz - 600Hz
+    highpass.Q.value = 0.5;
 
     // ── Noise Buffer ───────────────────────────────────────────────
     const buffer = this._createWhiteNoiseBuffer(decayTime + 0.01, ctx.sampleRate);
     const source = ctx.createBufferSource();
     source.buffer = buffer;
 
-    // ── Audio Graph (Chaining both filters) ─────────────────────────
-    source.connect(bandpass);
-    bandpass.connect(lowpass); // Noise -> Bandpass -> Lowpass
+    // ── Audio Graph (Source -> HPF -> LPF -> Panner -> Gain) ────────
+    source.connect(highpass);
+    highpass.connect(lowpass);
     lowpass.connect(panner);
     panner.connect(dropGain);
     dropGain.connect(this.masterDestination);
@@ -292,8 +293,8 @@ export default class RainExpert {
     const cleanupDelay = Math.max(0.05, (decayEnd - ctx.currentTime + 0.05));
     const cleanupTimer = setTimeout(() => {
       source.disconnect();
-      bandpass.disconnect();
-      lowpass.disconnect(); // Don't forget to clean up the new filter
+      highpass.disconnect();
+      lowpass.disconnect();
       panner.disconnect();
       dropGain.disconnect();
     }, cleanupDelay * 1000);
@@ -301,6 +302,7 @@ export default class RainExpert {
     // Track cleanup timer
     this._cleanupTimeouts.push(cleanupTimer);
   }
+
 
   /**
    * Generates a mono AudioBuffer of white noise of the given duration.
