@@ -1,24 +1,18 @@
 /**
  * expert_rain.js
- * Procedural Acoustic World Simulator
+ * Gentle AAA-style procedural rain
  *
- * Gentle AAA rain rewrite:
- * - Pre-rendered buffer pooling
- * - Slight pitch randomization ("19-20 difference")
- * - Zero runtime filter math during playback
- * - Density-driven scheduling
- * - Softer, darker, less crispy rainfall
+ * Design goals:
+ * - softer, wetter, less crispy
+ * - no runtime filters during playback
+ * - pre-rendered buffer pools
+ * - subtle pitch/gain randomization
+ * - continuous rain wash layer for AAA realism
  *
- * Rain-only engine:
- * - no wind synthesis
- * - no oscillators/FM sweeps
- * - no live BiquadFilterNode creation during playback
- * - all coloration baked into the buffer pool
- *
- * Additional improvement for gentler rain:
- * - nearPool: softer close drops
+ * Pool structure:
+ * - nearPool: close, soft droplets
  * - farPool: diffuse multi-tick clusters
- * - washPool: subtle atmospheric rain glue layer
+ * - washPool: very soft continuous rain glue
  */
 
 export default class RainExpert {
@@ -26,8 +20,6 @@ export default class RainExpert {
     if (!audioCtx) {
       throw new Error("RainExpert requires an AudioContext.");
     }
-
-    this.audioCtx = audioCtx;
 
     if (
       destinationNode &&
@@ -39,6 +31,7 @@ export default class RainExpert {
       );
     }
 
+    this.audioCtx = audioCtx;
     this.destination = destinationNode || audioCtx.destination;
 
     this.id =
@@ -57,29 +50,29 @@ export default class RainExpert {
     // Scheduler
     this._scheduler = null;
     this._tickMs = 100;
-    this._lookahead = 0.15; // schedule 150ms ahead
+    this._lookahead = 0.15;
     this._scheduledUntil = 0;
 
-    // Residuals for stable density conversion
+    // Stable conversion residues
     this._nearResidue = 0;
     this._farResidue = 0;
     this._washResidue = 0;
 
-    // Active one-shot nodes for cleanup
+    // Active one-shot nodes
     this._activeEvents = new Set();
 
-    // Pre-baked pools
+    // Pools
     this.nearPool = [];
     this.farPool = [];
     this.washPool = [];
 
-    // Master output chain
+    // Master chain
     this.outputGain = this.audioCtx.createGain();
-    this.outputGain.gain.value = 0.76;
+    this.outputGain.gain.value = 0.74;
 
     this.limiter = this.audioCtx.createDynamicsCompressor();
     this.limiter.threshold.value = -12;
-    this.limiter.knee.value = 10;
+    this.limiter.knee.value = 12;
     this.limiter.ratio.value = 6;
     this.limiter.attack.value = 0.004;
     this.limiter.release.value = 0.18;
@@ -87,9 +80,7 @@ export default class RainExpert {
     this.outputGain.connect(this.limiter);
     this.limiter.connect(this.destination);
 
-    // Pre-bake once.
     this._preBakePools();
-
     this._applyMasterTone(true);
   }
 
@@ -121,13 +112,8 @@ export default class RainExpert {
     return a + (b - a) * t;
   }
 
-  _poissonDelaySeconds(ratePerSecond) {
-    const rate = Math.max(0.2, ratePerSecond);
-    return -Math.log(1 - Math.random()) / rate;
-  }
-
-  _bucketMs(valueMs, stepMs = 5) {
-    return Math.max(stepMs, Math.round(valueMs / stepMs) * stepMs);
+  _pick(arr) {
+    return arr[(Math.random() * arr.length) | 0];
   }
 
   _getIntensity() {
@@ -137,21 +123,17 @@ export default class RainExpert {
   _enclosureTone() {
     switch (this.enclosure) {
       case "umbrella":
-        return { gainMul: 0.92, densityMul: 0.94 };
+        return { gainMul: 0.94, densityMul: 0.96 };
       case "indoor":
-        return { gainMul: 0.84, densityMul: 0.90 };
+        return { gainMul: 0.88, densityMul: 0.90 };
       case "vehicle":
-        return { gainMul: 0.80, densityMul: 0.88 };
+        return { gainMul: 0.84, densityMul: 0.88 };
       case "tunnel":
-        return { gainMul: 0.90, densityMul: 1.02 };
+        return { gainMul: 0.92, densityMul: 1.02 };
       case "open":
       default:
         return { gainMul: 1.0, densityMul: 1.0 };
     }
-  }
-
-  _pick(array) {
-    return array[(Math.random() * array.length) | 0];
   }
 
   /* ============================================================
@@ -159,76 +141,73 @@ export default class RainExpert {
    * ========================================================== */
 
   _preBakePools() {
-    const intensitySeedsNear = [
-      0.08, 0.12, 0.16, 0.20, 0.24,
-      0.28, 0.32, 0.36, 0.40, 0.44,
-      0.48, 0.54, 0.60, 0.68, 0.76,
+    const nearSeeds = [
+      0.08, 0.11, 0.14, 0.17, 0.20,
+      0.23, 0.26, 0.30, 0.34, 0.38,
+      0.42, 0.47, 0.53, 0.60, 0.68,
     ];
 
-    const intensitySeedsFar = [
-      0.30, 0.38, 0.45, 0.52, 0.60,
-      0.68, 0.76, 0.84, 0.92, 1.00,
+    const farSeeds = [
+      0.28, 0.34, 0.40, 0.46, 0.52,
+      0.60, 0.68, 0.76, 0.86, 0.96,
     ];
 
-    const intensitySeedsWash = [
-      0.12, 0.20, 0.28, 0.38, 0.48, 0.60,
+    const washSeeds = [
+      0.10, 0.16, 0.22, 0.30, 0.40, 0.52,
     ];
 
     for (let i = 0; i < 15; i++) {
-      const seed = intensitySeedsNear[i % intensitySeedsNear.length];
-      this.nearPool.push(this._makeNearDropBuffer(seed, i));
+      this.nearPool.push(
+        this._makeNearDropBuffer(nearSeeds[i], i)
+      );
     }
 
     for (let i = 0; i < 10; i++) {
-      const seed = intensitySeedsFar[i % intensitySeedsFar.length];
-      this.farPool.push(this._makeFarClusterBuffer(seed, i));
+      this.farPool.push(
+        this._makeFarClusterBuffer(farSeeds[i], i)
+      );
     }
 
     for (let i = 0; i < 6; i++) {
-      const seed = intensitySeedsWash[i % intensitySeedsWash.length];
-      this.washPool.push(this._makeWashBuffer(seed, i));
+      this.washPool.push(
+        this._makeWashBuffer(washSeeds[i], i)
+      );
     }
 
     this._log(
-      `Pre-baked ${this.nearPool.length} near buffers, ${this.farPool.length} far buffers, and ${this.washPool.length} wash buffers.`
+      `Pre-baked ${this.nearPool.length} near, ${this.farPool.length} far, ${this.washPool.length} wash buffers.`
     );
   }
 
   /**
-   * Near-field drop:
-   * - softened transient
-   * - darker, wetter body
-   * - minimal crispness
+   * Near-field droplet:
+   * softer attack, longer decay, very dark baked body.
    */
-  _makeNearDropBuffer(seed = 0.5, variantIndex = 0) {
+  _makeNearDropBuffer(seed = 0.2, variantIndex = 0) {
     const sr = this.audioCtx.sampleRate;
-
-    const dur = this._rand(0.07, 0.14) * this._lerp(0.92, 1.08, seed);
-    const length = Math.max(1, Math.floor(sr * dur));
+    const duration = this._rand(0.085, 0.16) * this._lerp(0.92, 1.06, seed);
+    const length = Math.max(1, Math.floor(sr * duration));
     const buffer = this.audioCtx.createBuffer(1, length, sr);
     const data = buffer.getChannelData(0);
 
-    const attackMs = this._rand(14, 28);
-    const decayMs = this._rand(80, 180);
+    const attackMs = this._rand(28, 60);
+    const decayMs = this._rand(180, 520);
     const attackSamples = Math.max(1, Math.floor((attackMs / 1000) * sr));
     const decaySamples = Math.max(1, Math.floor((decayMs / 1000) * sr));
 
-    // Softer lowpass bake, much darker than before.
+    // Extremely dark bake to avoid frying-pan brightness.
     const lp = this._clamp(
-      this._lerp(0.003, 0.018, seed) + variantIndex * 0.0008,
-      0.003,
-      0.022
+      this._lerp(0.0018, 0.008, seed) + variantIndex * 0.00025,
+      0.0015,
+      0.012
     );
 
-    // Two-stage smoothing makes the drop feel wet, not crispy.
     let fast = 0;
     let slow = 0;
+    const fastCoeff = this._clamp(this._lerp(0.015, 0.035, seed), 0.01, 0.05);
+    const slowCoeff = this._clamp(this._lerp(0.0015, 0.006, seed), 0.001, 0.01);
 
-    const fastCoeff = this._clamp(this._lerp(0.035, 0.075, seed), 0.02, 0.10);
-    const slowCoeff = this._clamp(this._lerp(0.004, 0.014, seed), 0.003, 0.018);
-
-    // Gentle variation so the 15 pooled drops don't collapse into identical timbres.
-    const bodyGain = this._lerp(0.60, 0.92, seed);
+    const bodyGain = this._lerp(0.42, 0.78, seed);
 
     for (let i = 0; i < length; i++) {
       const white = this._rand(-1, 1);
@@ -244,16 +223,13 @@ export default class RainExpert {
       fast += (white - fast) * fastCoeff;
       slow += (fast - slow) * slowCoeff;
 
-      // Very subtle short-range irregularity, kept much lower than before.
-      const micro = this._rand(-0.006, 0.006) * (1 - i / length);
+      // Very low high-frequency residue; the body should dominate.
+      const dirt = this._rand(-0.002, 0.002) * (1 - i / length);
 
-      // Very small high component; most energy lives in the low / mid body.
-      const shaped = (slow * 0.95 + fast * 0.05 + micro) * env;
+      const shaped = (slow * 0.985 + fast * 0.015 + dirt) * env;
+      const soft = shaped / (1 + Math.abs(shaped) * 0.28);
 
-      // Extra softening to remove the frying-pan edge.
-      const soft = shaped / (1 + Math.abs(shaped) * 0.38);
-
-      data[i] = soft * bodyGain * (0.82 + seed * 0.18);
+      data[i] = soft * bodyGain * (0.84 + seed * 0.14);
     }
 
     return buffer;
@@ -261,13 +237,11 @@ export default class RainExpert {
 
   /**
    * Far-field cluster:
-   * - 3 to 5 rapid overlapping impact ticks baked into one buffer
-   * - dark, diffuse, and smeared
+   * 3-5 merged ticks baked into one buffer, diffuse and gentle.
    */
-  _makeFarClusterBuffer(seed = 0.7, variantIndex = 0) {
+  _makeFarClusterBuffer(seed = 0.4, variantIndex = 0) {
     const sr = this.audioCtx.sampleRate;
-
-    const duration = this._rand(0.18, 0.36) * this._lerp(0.92, 1.08, seed);
+    const duration = this._rand(0.22, 0.52) * this._lerp(0.90, 1.06, seed);
     const length = Math.max(1, Math.floor(sr * duration));
     const buffer = this.audioCtx.createBuffer(1, length, sr);
     const data = buffer.getChannelData(0);
@@ -276,31 +250,31 @@ export default class RainExpert {
     const tickSpacing = duration / (tickCount + 1);
 
     const lp = this._clamp(
-      this._lerp(0.0015, 0.008, seed) + variantIndex * 0.0005,
-      0.0015,
-      0.010
+      this._lerp(0.001, 0.0045, seed) + variantIndex * 0.00018,
+      0.001,
+      0.006
     );
 
     for (let tick = 0; tick < tickCount; tick++) {
-      const center = (tick + 1) * tickSpacing + this._rand(-0.01, 0.01);
+      const center = (tick + 1) * tickSpacing + this._rand(-0.012, 0.012);
       const centerIdx = Math.max(0, Math.floor(center * sr));
 
-      const attackMs = this._rand(16, 32);
-      const decayMs = this._rand(120, 240);
+      const attackMs = this._rand(24, 48);
+      const decayMs = this._rand(260, 620);
       const attackSamples = Math.max(1, Math.floor((attackMs / 1000) * sr));
       const decaySamples = Math.max(1, Math.floor((decayMs / 1000) * sr));
 
       const tickLength = Math.max(
-        16,
-        Math.floor(this._rand(0.05, 0.12) * sr)
+        20,
+        Math.floor(this._rand(0.08, 0.18) * sr)
       );
 
-      const tickGain = this._rand(0.22, 0.52) * this._lerp(0.76, 0.95, seed);
+      const tickGain = this._rand(0.12, 0.34) * this._lerp(0.74, 0.94, seed);
 
       let fast = 0;
       let slow = 0;
-      const fastCoeff = this._clamp(this._lerp(0.02, 0.05, seed), 0.015, 0.06);
-      const slowCoeff = this._clamp(this._lerp(0.002, 0.008, seed), 0.0015, 0.01);
+      const fastCoeff = this._clamp(this._lerp(0.01, 0.03, seed), 0.008, 0.04);
+      const slowCoeff = this._clamp(this._lerp(0.001, 0.004, seed), 0.0008, 0.008);
 
       for (let i = 0; i < tickLength; i++) {
         const idx = centerIdx + i;
@@ -319,30 +293,27 @@ export default class RainExpert {
         fast += (white - fast) * fastCoeff;
         slow += (fast - slow) * slowCoeff;
 
-        const body = (slow * 0.97 + fast * 0.03) * env;
-        const wet = body / (1 + Math.abs(body) * 0.34);
+        const body = (slow * 0.988 + fast * 0.012) * env;
+        const wet = body / (1 + Math.abs(body) * 0.24);
 
         data[idx] += wet * tickGain;
       }
     }
 
     for (let i = 0; i < length; i++) {
-      data[i] *= 0.92;
+      data[i] *= 0.94;
     }
 
     return buffer;
   }
 
   /**
-   * Wash buffer:
-   * - subtle diffuse rain glue
-   * - very soft, very dark
-   * - no hiss, no sharp transient
+   * Soft wash layer:
+   * a very gentle diffuse background glue for AAA-style rain.
    */
-  _makeWashBuffer(seed = 0.4, variantIndex = 0) {
+  _makeWashBuffer(seed = 0.2, variantIndex = 0) {
     const sr = this.audioCtx.sampleRate;
-
-    const duration = this._rand(1.6, 3.8) * this._lerp(0.92, 1.08, seed);
+    const duration = this._rand(1.8, 4.8) * this._lerp(0.92, 1.06, seed);
     const length = Math.max(1, Math.floor(sr * duration));
     const buffer = this.audioCtx.createBuffer(1, length, sr);
     const data = buffer.getChannelData(0);
@@ -351,9 +322,9 @@ export default class RainExpert {
     let b = 0;
     let c = 0;
 
-    const coeffA = this._clamp(this._lerp(0.0012, 0.004, seed), 0.001, 0.006);
-    const coeffB = this._clamp(this._lerp(0.0008, 0.0025, seed), 0.0006, 0.004);
-    const coeffC = this._clamp(this._lerp(0.0018, 0.005, seed), 0.0015, 0.006);
+    const coeffA = this._clamp(this._lerp(0.0008, 0.0025, seed), 0.0006, 0.004);
+    const coeffB = this._clamp(this._lerp(0.0005, 0.0018, seed), 0.0004, 0.003);
+    const coeffC = this._clamp(this._lerp(0.001, 0.0032, seed), 0.0008, 0.004);
 
     for (let i = 0; i < length; i++) {
       const white1 = this._rand(-1, 1);
@@ -365,14 +336,13 @@ export default class RainExpert {
 
       const t = i / (length - 1);
       const rise = t < 0.12 ? t / 0.12 : 1;
-      const fall = t > 0.72 ? (1 - t) / 0.28 : 1;
-      const env = Math.pow(this._clamp(Math.min(rise, fall), 0, 1), 0.72);
+      const fall = t > 0.76 ? (1 - t) / 0.24 : 1;
+      const env = Math.pow(this._clamp(Math.min(rise, fall), 0, 1), 0.82);
 
-      const body = (b * 0.62 + c * 0.28 + a * 0.10) * env;
-      const soft = body / (1 + Math.abs(body) * 0.30);
+      const body = (b * 0.68 + c * 0.24 + a * 0.08) * env;
+      const soft = body / (1 + Math.abs(body) * 0.22);
 
-      // Very low-level texture; this is glue, not a foreground event.
-      data[i] = soft * this._lerp(0.28, 0.55, seed) * this._lerp(0.96, 1.04, variantIndex / 5);
+      data[i] = soft * this._lerp(0.18, 0.42, seed) * this._lerp(0.96, 1.04, variantIndex / 5);
     }
 
     return buffer;
@@ -382,13 +352,6 @@ export default class RainExpert {
    * Density Rules
    * ========================================================== */
 
-  /**
-   * Returns target drops/sec across a virtual 1m² field.
-   * This keeps the same overall density expectation:
-   * - light rain: 50..150
-   * - moderate rain: 300..500 around 0.5
-   * - heavy rain: 1000+
-   */
   _dropRate(intensity) {
     if (intensity <= 0.001) return 0;
 
@@ -408,14 +371,14 @@ export default class RainExpert {
     }
 
     const t = (intensity - 0.8) / 0.2;
-    return 1000 + 1200 * Math.pow(t, 1.3); // 1000+
+    return 1000 + 1200 * Math.pow(t, 1.3);
   }
 
   _nearShare(intensity) {
-    if (intensity < 0.3) return this._lerp(0.68, 0.50, intensity / 0.3);
-    if (intensity < 0.6) return this._lerp(0.50, 0.32, (intensity - 0.3) / 0.3);
-    if (intensity < 0.8) return this._lerp(0.32, 0.22, (intensity - 0.6) / 0.2);
-    return this._lerp(0.22, 0.12, (intensity - 0.8) / 0.2);
+    if (intensity < 0.3) return this._lerp(0.62, 0.46, intensity / 0.3);
+    if (intensity < 0.6) return this._lerp(0.46, 0.28, (intensity - 0.3) / 0.3);
+    if (intensity < 0.8) return this._lerp(0.28, 0.18, (intensity - 0.6) / 0.2);
+    return this._lerp(0.18, 0.10, (intensity - 0.8) / 0.2);
   }
 
   _clusterTickCount(intensity) {
@@ -425,8 +388,7 @@ export default class RainExpert {
   }
 
   _washRate(intensity) {
-    // Gentle diffuse background wash that smooths out the "frying pan" character.
-    return 0.12 + Math.pow(intensity, 1.45) * 4.0;
+    return 0.20 + Math.pow(intensity, 1.38) * 5.2;
   }
 
   /* ============================================================
@@ -493,12 +455,11 @@ export default class RainExpert {
     if (totalRate <= 0) return;
 
     const nearShare = this._nearShare(intensity);
-    const nearRate = Math.min(150, totalRate * nearShare);
+    const nearRate = Math.min(90, totalRate * nearShare);
     const farEquivalentRate = Math.max(0, totalRate - nearRate);
     const clusterSize = this._clusterTickCount(intensity);
     const washRate = this._washRate(intensity) * env.densityMul;
 
-    // Near-field and far-field counts
     const nearExpected = nearRate * frameDur + this._nearResidue;
     const farExpected = (farEquivalentRate / clusterSize) * frameDur + this._farResidue;
     const washExpected = washRate * frameDur + this._washResidue;
@@ -511,8 +472,6 @@ export default class RainExpert {
     this._farResidue = farExpected - farCount;
     this._washResidue = washExpected - washCount;
 
-    // Low / moderate rain: near drops plus subtle wash.
-    // Heavy rain: near drops, far clusters, and wash all together.
     for (let i = 0; i < nearCount; i++) {
       const t = frameStart + Math.random() * frameDur;
       this._spawnDrop(t, {
@@ -566,7 +525,7 @@ export default class RainExpert {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
 
-    // Slight playback variation only; no extra DSP during playback.
+    // Gentle variation only.
     if (kind === "near") {
       source.playbackRate.value = this._clamp(this._rand(0.985, 1.015), 0.95, 1.05);
     } else if (kind === "far") {
@@ -581,37 +540,43 @@ export default class RainExpert {
     } else if (kind === "far") {
       panner.pan.value = this._clamp(this._rand(-0.9, 0.9), -1, 1);
     } else {
-      panner.pan.value = this._clamp(this._rand(-0.7, 0.7), -1, 1);
+      panner.pan.value = this._clamp(this._rand(-0.6, 0.6), -1, 1);
     }
 
     const gain = ctx.createGain();
 
     const densityComp = 1 / Math.sqrt(1 + totalRate / 240);
-    const intensityGain = 0.42 + intensity * 0.58;
+    const intensityGain = 0.40 + intensity * 0.60;
 
     let baseGain;
     if (kind === "near") {
-      baseGain = this._rand(0.010, 0.055);
+      baseGain = this._rand(0.006, 0.030);
     } else if (kind === "far") {
-      baseGain = this._rand(0.006, 0.028);
+      baseGain = this._rand(0.004, 0.016);
     } else {
-      baseGain = this._rand(0.0035, 0.015);
+      baseGain = this._rand(0.0018, 0.008);
     }
 
     let finalGain = baseGain * densityComp * intensityGain * env.gainMul;
     if (kind === "wash") {
-      finalGain *= 0.8;
+      finalGain *= 0.7;
     }
 
-    finalGain = this._clamp(finalGain, 0.001, 0.08);
+    finalGain = this._clamp(finalGain, 0.0008, 0.05);
 
-    const attack = kind === "wash" ? this._rand(0.008, 0.016) : this._rand(0.004, 0.012);
+    const attack =
+      kind === "wash"
+        ? this._rand(0.012, 0.028)
+        : kind === "far"
+        ? this._rand(0.018, 0.040)
+        : this._rand(0.024, 0.060);
+
     const releaseTail =
       kind === "wash"
-        ? this._rand(0.20, 0.60)
+        ? this._rand(0.35, 1.10)
         : kind === "far"
-        ? this._rand(0.06, 0.16)
-        : this._rand(0.04, 0.12);
+        ? this._rand(0.16, 0.52)
+        : this._rand(0.10, 0.28);
 
     gain.gain.setValueAtTime(0.0001, startTime);
     gain.gain.linearRampToValueAtTime(finalGain, startTime + attack);
@@ -648,16 +613,16 @@ export default class RainExpert {
 
   _getBufferDuration(buffer, kind) {
     if (!buffer) {
-      if (kind === "near") return 0.1;
-      if (kind === "far") return 0.2;
-      return 1.4;
+      if (kind === "near") return 0.14;
+      if (kind === "far") return 0.32;
+      return 3.0;
     }
 
     return Math.max(
-      0.03,
+      0.05,
       Math.min(
-        buffer.duration || 0.12,
-        kind === "near" ? 0.16 : kind === "far" ? 0.36 : 4.0
+        buffer.duration || 0.2,
+        kind === "near" ? 0.18 : kind === "far" ? 0.52 : 5.0
       )
     );
   }
@@ -682,7 +647,7 @@ export default class RainExpert {
   }
 
   /* ============================================================
-   * Tone / Master
+   * Master Tone
    * ========================================================== */
 
   _applyMasterTone(smooth = false) {
@@ -691,12 +656,10 @@ export default class RainExpert {
     const now = this.audioCtx.currentTime;
     const tc = smooth ? 0.08 : 0.05;
 
-    // Output gain remains conservative; density should be perceived,
-    // not simply louder.
     const targetGain = this._clamp(
-      0.74 * env.gainMul + intensity * 0.05,
-      0.48,
-      0.88
+      0.70 * env.gainMul + intensity * 0.05,
+      0.42,
+      0.84
     );
 
     this.outputGain.gain.setTargetAtTime(targetGain, now, tc);
