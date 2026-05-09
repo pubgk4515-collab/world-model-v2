@@ -201,7 +201,7 @@ export default class RainExpert {
     const decaySamples = Math.max(1, Math.floor((decayMs / 1000) * sr));
 
     // Baked muffling via a simple one-pole lowpass in sample-gen.
-    const lp = this._clamp(this._lerp(0.03, 0.10, seed) + variantIndex * 0.002, 0.03, 0.14);
+    const lp = this._clamp(this._lerp(0.008, 0.035, seed) + variantIndex * 0.001, 0.008, 0.05);
     let low = 0;
     let softClamp = 0;
 
@@ -236,7 +236,7 @@ export default class RainExpert {
         const pos = transientPositions[p];
         const dt = i - pos;
         if (dt >= 0 && dt < 5) {
-          snap += (5 - dt) * 0.035;
+          snap += (5 - dt) * 0.008;
         }
       }
 
@@ -269,7 +269,7 @@ export default class RainExpert {
     const tickSpacing = duration / (tickCount + 1);
 
     // Darker than near drops.
-    const lp = this._clamp(this._lerp(0.02, 0.06, seed) + variantIndex * 0.002, 0.02, 0.10);
+    const lp = this._clamp(this._lerp(0.005, 0.02, seed) + variantIndex * 0.001, 0.005, 0.03);
     let low = 0;
 
     for (let tick = 0; tick < tickCount; tick++) {
@@ -496,7 +496,7 @@ export default class RainExpert {
     source.buffer = buffer;
 
     // The "19-20 difference"
-    source.playbackRate.value = this._clamp(this._rand(0.92, 1.08), 0.82, 1.18);
+    source.playbackRate.value = this._clamp(this._rand(0.96, 1.04), 0.9, 1.1);
 
     const panner = ctx.createStereoPanner();
     panner.pan.value = this._clamp(this._rand(-1, 1), -1, 1);
