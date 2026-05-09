@@ -1,6 +1,6 @@
 /**
  * app.js – Master Controller for Symbiote Studio · MoE World Model
- * 
+ *
  * This file orchestrates UI interactions, manages the global audio engine,
  * routes world state to active experts, and handles dynamic expert
  * instantiation/removal. It is the only JavaScript file needed on top of
@@ -150,7 +150,6 @@ function closeModal() {
 pressureSlider.addEventListener('input', (e) => {
   try {
     const value = parseFloat(e.target.value);
-    // Reflect value in the tiny indicator text
     if (sliderValueIndicator) {
       sliderValueIndicator.textContent = value.toFixed(2);
     }
@@ -158,7 +157,6 @@ pressureSlider.addEventListener('input', (e) => {
     // First interaction may also need to trigger audio init
     if (!audioCtx) initEngine(); // Fire‑and‑forget (no await needed here)
 
-    // Update global state (experts will be notified)
     updateState({ atmosphericPressure: value });
   } catch (err) {
     console.error(err);
@@ -181,7 +179,6 @@ enclosureSelect.addEventListener('change', (e) => {
 // 4.3 "Add Acoustic Expert" Button
 addLayerBtn.addEventListener('click', async (e) => {
   try {
-    // Ensure audio engine is ready before showing expert choices
     await initEngine();
     openModal();
   } catch (err) {
@@ -193,8 +190,6 @@ addLayerBtn.addEventListener('click', async (e) => {
 // 4.4 Close modal when clicking the semi‑transparent backdrop
 layerModal.addEventListener('click', (e) => {
   try {
-    // Only dismiss if the click landed directly on the modal backdrop,
-    // not on a child element (buttons, handle, etc.)
     if (e.target === layerModal) {
       closeModal();
     }
@@ -204,11 +199,11 @@ layerModal.addEventListener('click', (e) => {
   }
 });
 
-// 4.5 Expert selection buttons inside the modal
-layerModal.addEventListener('click', (e) => {
+// 4.5 Expert selection buttons inside the modal (CORRECTED)
+layerModal.addEventListener('click', async (e) => {
   try {
     const btn = e.target.closest('.sheet-btn');
-    if (!btn) return; // Not a button click
+    if (!btn) return;
 
     // "Custom · Paste Expert Code" closes the sheet but does nothing else yet
     if (btn.id === 'injectCodeBtn') {
@@ -219,26 +214,28 @@ layerModal.addEventListener('click', (e) => {
     const expertType = btn.dataset.expert;
     if (!expertType) return;
 
-    // Safety: audio must be alive
-    if (!audioCtx) {
-      throw new Error('Audio engine not initialised. Tap "Add Expert" again.');
+    // Ensure audio engine is fully initialised before creating any expert
+    await initEngine();
+
+    // Extra safety – both audioCtx and masterBus must exist
+    if (!audioCtx || !masterBus) {
+      throw new Error('Audio engine not properly initialised. Tap "Add Expert" again.');
     }
 
     // ---- Instantiate the requested expert ----
     if (expertType === 'rain') {
-      const expert = new RainExpert();
+      const expert = new RainExpert(audioCtx, masterBus);
       const id = crypto.randomUUID
         ? crypto.randomUUID()
-        : fallbackUUID(); // Robustness for older environments
+        : fallbackUUID();
 
       activeExperts.set(id, expert);
 
-      // Ask the expert to return its DOM card as an HTML string
-      const uiCardHTML = expert.getUICard(id);
+      // Expert card uses its internal ID (generated in constructor)
+      const uiCardHTML = expert.getUICard();
       expertRack.insertAdjacentHTML('beforeend', uiCardHTML);
       const card = expertRack.lastElementChild;
 
-      // Let the expert attach its own event listeners inside the card
       expert.bindCardControls(card);
 
       // Immediately sync with the current world state
@@ -247,7 +244,6 @@ layerModal.addEventListener('click', (e) => {
       throw new Error(`Unknown expert type: "${expertType}"`);
     }
 
-    // Expert added successfully – hide the sheet
     closeModal();
   } catch (err) {
     console.error(err);
@@ -258,11 +254,6 @@ layerModal.addEventListener('click', (e) => {
 // ---------------------------------------------------------------------------
 // 5. The Killer – Event Delegation for Expert Removal
 // ---------------------------------------------------------------------------
-/**
- * Listens for clicks on any .remove-btn inside #expertRack.
- * Finds the parent card via [data-id], tears down the expert,
- * removes its DOM element, and deletes it from the activeExperts map.
- */
 expertRack.addEventListener('click', (e) => {
   try {
     const removeBtn = e.target.closest('.remove-btn');
@@ -276,14 +267,12 @@ expertRack.addEventListener('click', (e) => {
 
     const expert = activeExperts.get(id);
     if (expert) {
-      // Graceful teardown (disconnect nodes, stop timers, etc.)
       if (typeof expert.destroy === 'function') {
         expert.destroy();
       }
       activeExperts.delete(id);
     }
 
-    // Remove the visual card from the rack
     card.remove();
     console.log(`🗑️ Expert ${id} removed`);
   } catch (err) {
@@ -306,7 +295,6 @@ function fallbackUUID() {
 // ---------------------------------------------------------------------------
 // Final Initialisation
 // ---------------------------------------------------------------------------
-// Sync UI with default state values
 if (sliderValueIndicator) {
   sliderValueIndicator.textContent = pressureSlider.value;
 }
