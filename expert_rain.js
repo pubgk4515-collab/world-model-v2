@@ -247,7 +247,7 @@ export default class RainExpert {
     volume = Math.max(0.005, Math.min(0.70, volume)); // Thoda headroom rakha to avoid distortion
 
     // ── The "Goldilocks" Envelope (Natural Water Patter) ────────────
-    const attackTime = 0.006 + Math.random() * 0.004;     // 2–5 ms (Fast enough for a tap, slow enough to not click)
+    const attackTime = 0.005 + Math.random() * 0.003;     // 2–5 ms (Fast enough for a tap, slow enough to not click)
     const decayTime  = 0.030 + Math.random() * 0.050;     // 30–80 ms (Natural absorption)
     const attackEnd  = startTime + attackTime;
     const decayEnd   = attackEnd + decayTime;
