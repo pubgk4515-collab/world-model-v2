@@ -247,7 +247,7 @@ export default class RainExpert {
     volume = Math.max(0.005, Math.min(0.70, volume)); // Thoda headroom rakha to avoid distortion
 
     // ── The "Goldilocks" Envelope (Natural Water Patter) ────────────
-    const attackTime = 0.002 + Math.random() * 0.003;     // 2–5 ms (Fast enough for a tap, slow enough to not click)
+    const attackTime = 0.006 + Math.random() * 0.004;     // 2–5 ms (Fast enough for a tap, slow enough to not click)
     const decayTime  = 0.030 + Math.random() * 0.050;     // 30–80 ms (Natural absorption)
     const attackEnd  = startTime + attackTime;
     const decayEnd   = attackEnd + decayTime;
@@ -265,7 +265,7 @@ export default class RainExpert {
     // ── Filter 1: Lowpass (Kills the Kurkure Hiss) ──────────────────
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = 'lowpass';
-    lowpass.frequency.value = 3500 + Math.random() * 2000; // 3500Hz - 5500Hz
+    lowpass.frequency.value = 1800 + Math.random() * 1200; // 3500Hz - 5500Hz
     lowpass.Q.value = 0.5;
 
     // ── Filter 2: Highpass (Kills the Muffled Mud/Distortion) ───────
