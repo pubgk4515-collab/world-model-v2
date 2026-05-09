@@ -24,6 +24,8 @@
 // Static Imports (expert modules)
 // ---------------------------------------------------------------------------
 import RainExpert from './expert_rain.js';   // Future native module
+import WindExpert from './expert_wind.js';
+
 
 // ---------------------------------------------------------------------------
 // Audio Engine Globals
@@ -222,28 +224,33 @@ layerModal.addEventListener('click', async (e) => {
       throw new Error('Audio engine not properly initialised. Tap "Add Expert" again.');
     }
 
-    // ---- Instantiate the requested expert ----
+        // ---- Instantiate the requested expert ----
+    let expert = null;
+
     if (expertType === 'rain') {
-      const expert = new RainExpert(audioCtx, masterBus);
-      const id = crypto.randomUUID
-        ? crypto.randomUUID()
-        : fallbackUUID();
-
-      activeExperts.set(id, expert);
-
-      // Expert card uses its internal ID (generated in constructor)
-      const uiCardHTML = expert.getUICard();
-      expertRack.insertAdjacentHTML('beforeend', uiCardHTML);
-      const card = expertRack.lastElementChild;
-
-      expert.bindCardControls(card);
-
-      // Immediately sync with the current world state
-      expert.onWorldStateUpdate(currentState);
+      expert = new RainExpert(audioCtx, masterBus);
+    } else if (expertType === 'wind') {
+      expert = new WindExpert(audioCtx, masterBus);
     } else {
       throw new Error(`Unknown expert type: "${expertType}"`);
     }
 
+    // Har expert ke paas apna internal .id hota hai (from constructor)
+    const id = expert.id; 
+    activeExperts.set(id, expert);
+
+    // Expert card UI generate karo aur Rack mein daalo
+    const uiCardHTML = expert.getUICard();
+    expertRack.insertAdjacentHTML('beforeend', uiCardHTML);
+    
+    // Last added card ko pakdo aur controls bind karo
+    const card = expertRack.lastElementChild;
+    expert.bindCardControls(card);
+
+    // Immediately sync with the current world state
+    expert.onWorldStateUpdate(currentState);
+    
+    console.log(`✨ Expert Added: ${expertType} (ID: ${id})`);
     closeModal();
   } catch (err) {
     console.error(err);
