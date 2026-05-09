@@ -201,7 +201,7 @@ export default class RainExpert {
     const decaySamples = Math.max(1, Math.floor((decayMs / 1000) * sr));
 
     // Baked muffling via a simple one-pole lowpass in sample-gen.
-    const lp = this._clamp(this._lerp(0.08, 0.22, seed) + variantIndex * 0.003, 0.06, 0.26);
+    const lp = this._clamp(this._lerp(0.04, 0.12, seed) + variantIndex * 0.002, 0.03, 0.14);
     let low = 0;
     let softClamp = 0;
 
@@ -269,7 +269,7 @@ export default class RainExpert {
     const tickSpacing = duration / (tickCount + 1);
 
     // Darker than near drops.
-    const lp = this._clamp(this._lerp(0.05, 0.16, seed) + variantIndex * 0.002, 0.04, 0.20);
+    const lp = this._clamp(this._lerp(0.03, 0.08, seed) + variantIndex * 0.002, 0.02, 0.10);
     let low = 0;
 
     for (let tick = 0; tick < tickCount; tick++) {
@@ -342,7 +342,7 @@ export default class RainExpert {
     }
 
     const t = (intensity - 0.8) / 0.2;
-    return 1000 + 450 * Math.pow(t, 1.15); // 1000+
+    return 1000 + 1200 * Math.pow(t, 1.3); // 1000+
   }
 
   _nearShare(intensity) {
