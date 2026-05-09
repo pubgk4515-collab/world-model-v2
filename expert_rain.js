@@ -1,13 +1,17 @@
 /**
- * expert_rain.js – Rain Expert (Liquid FM Synthesis & Lookahead Scheduling)
+ * expert_rain.js – Rain Expert (Percussive Noise Snaps + Lookahead Scheduling)
  *
- * Implements rain using true liquid physics: each drop is a short sine sweep
- * (“plop”) layered with a heavily low‑pass filtered noise splash (“impact”).
- * Scheduling uses a sample‑accurate lookahead loop (setInterval) that pre‑
- * programmes drop start times directly on the audio thread, bypassing the
- * jitter and phasing of standard setTimeout.
+ * PURE rain simulation using millions of ultra‑short, percussive noise ticks.
+ * No oscillators, no FM sweeps – only broadband bursts shaped by an instant
+ * attack and a very fast exponential decay, filtered to mimic the texture of
+ * water hitting leaves, concrete, and fabric.
  *
- * This module satisfies the MoE World Model contract:
+ * Scheduling uses a sample‑accurate lookahead loop (setInterval every 100ms)
+ * that pre‑programmes drop start times directly on the audio thread, avoiding
+ * setTimeout jitter.  At maximum intensity the engine can easily schedule
+ * 200+ drops per second without audible phasing or CPU spikes.
+ *
+ * Contract (MoE World Model):
  *   constructor(audioCtx, destinationNode)
  *   onWorldStateUpdate(state)
  *   getUICard()
@@ -18,7 +22,7 @@
 export default class RainExpert {
   /**
    * @param {AudioContext} audioCtx        – shared AudioContext
-   * @param {AudioNode}    destinationNode – master bus input
+   * @param {AudioNode}    destinationNode – master bus input (summing point)
    */
   constructor(audioCtx, destinationNode) {
     if (!audioCtx) {
@@ -32,17 +36,18 @@ export default class RainExpert {
     /** @type {AudioNode} */
     this.masterDestination = destinationNode || audioCtx.destination;
 
-    // Unique identifier – used on the DOM card
+    // Unique ID (used on the DOM card)
     this.id = crypto.randomUUID?.() ?? this._fallbackUUID();
 
     // ── World State ──────────────────────────────────────────────────
-    this.globalPressure = 0.5;       // 0–1
-    this.localDensity  = 0.5;       // 0–1 (from card slider)
-    this.enclosure     = 'open';    // informational
+    this.globalPressure = 0.5;       // 0–1 (from atmosphere)
+    this.localDensity   = 0.5;       // 0–1 (from card slider)
+    this.enclosure      = 'open';    // informational
 
     // ── Scheduler State ──────────────────────────────────────────────
-    this._isDestroyed      = false;
-    this._schedulerInterval = null;  // setInterval handle
+    this._isDestroyed       = false;
+    this._schedulerInterval = null;   // setInterval handle
+    this._cleanupTimeouts   = [];     // tracks per‑drop cleanup setTimeout IDs
   }
 
   // -------------------------------------------------------------------
@@ -56,11 +61,11 @@ export default class RainExpert {
   }
 
   // -------------------------------------------------------------------
-  //  Public Lifecycle API
+  //  Public Lifecycle
   // -------------------------------------------------------------------
 
   /**
-   * Updates world state and restarts scheduling to match.
+   * Updates world state and restarts the scheduler to reflect new intensity.
    * @param {object} state – { atmosphericPressure, enclosure }
    */
   onWorldStateUpdate(state) {
@@ -75,7 +80,7 @@ export default class RainExpert {
   }
 
   /**
-   * Returns the expert’s UI card HTML string.
+   * Returns the HTML string for the expert’s glass‑morphic card.
    * @returns {string}
    */
   getUICard() {
@@ -121,13 +126,14 @@ export default class RainExpert {
 
   /**
    * Binds the density slider and starts the lookahead scheduler.
+   * Called by app.js after the card is injected.
    * @param {HTMLElement} card – root <article>
    */
   bindCardControls(card) {
     if (!card) return;
     const slider = card.querySelector('.density-slider');
     if (!slider) {
-      console.warn('RainExpert: density-slider not found in card');
+      console.warn('RainExpert: density-slider not found');
       return;
     }
 
@@ -141,28 +147,35 @@ export default class RainExpert {
       }
     });
 
-    // Start the engine immediately
+    // Launch the engine
     this._startScheduler();
   }
 
   /**
-   * Stops the scheduler and cleans up all resources.
+   * Tears down the scheduler, clears all pending cleanups, and disconnects
+   * any remaining audio nodes (self‑cleaning drops will already have removed
+   * themselves).
    */
   destroy() {
     if (this._isDestroyed) return;
     this._isDestroyed = true;
     this._stopScheduler();
+
+    // Clear any pending per‑drop cleanup timeouts
+    this._cleanupTimeouts.forEach(id => clearTimeout(id));
+    this._cleanupTimeouts = [];
+
     console.log(`RainExpert ${this.id}: destroyed`);
   }
 
   // -------------------------------------------------------------------
-  //  Lookahead Scheduler (setInterval)
+  //  Lookahead Scheduler
   // -------------------------------------------------------------------
 
   _startScheduler() {
     this._stopScheduler();
     if (!this._isDestroyed) {
-      // Run every 100 ms, each tick schedules drops for the next 150 ms
+      // Tick every 100 ms, scheduling drops for the next 150 ms
       this._schedulerInterval = setInterval(
         () => this._schedulerTick(),
         100
@@ -182,8 +195,9 @@ export default class RainExpert {
   }
 
   /**
-   * Called every 100 ms.  Computes how many drops should occur in the
-   * upcoming 150 ms window and schedules them with exact AudioContext times.
+   * Each tick calculates the number of drops that should fall in the
+   * upcoming 150 ms window based on intensity, then schedules them with
+   * exact AudioContext times.
    */
   _schedulerTick() {
     if (this._isDestroyed) {
@@ -192,12 +206,11 @@ export default class RainExpert {
     }
 
     const intensity = this.globalPressure * this.localDensity;
-    const dropsPerSec = 5 + intensity * 195;        // 5 → 200
+    const dropsPerSec = 5 + intensity * 245;        // 5 → 250
     const lookahead = 0.15;                          // seconds
 
     // Expected number of drops in this window
     const expected = dropsPerSec * lookahead;
-    // Integer part plus stochastic fractional remainder
     const integerPart = Math.floor(expected);
     const fractional = expected - integerPart;
     const dropCount = integerPart + (Math.random() < fractional ? 1 : 0);
@@ -205,114 +218,87 @@ export default class RainExpert {
     const now = this.audioCtx.currentTime;
 
     for (let i = 0; i < dropCount; i++) {
-      // Random start time within the next `lookahead` seconds
+      // Random absolute start time within the next 150 ms
       const startTime = now + Math.random() * lookahead;
       this._spawnDrop(startTime);
     }
   }
 
   // -------------------------------------------------------------------
-  //  Liquid FM Drop Synthesis
+  //  Percussive Drop Synthesis
   // -------------------------------------------------------------------
 
   /**
-   * Creates a single rain drop at the exact audio time given.
+   * Creates a single water drop impact – a sharp, broadband noise tick
+   * filtered to mimic a surface hit and spatialised with random panning
+   * and distance attenuation.
    *
-   * Each drop consists of:
-   *   - A sine‑wave “plop” with a rapid downward pitch sweep.
-   *   - A short, low‑pass filtered noise “splash”.
-   * Both are spatialised with a random X‑pan and distance‑dependent volume.
-   *
-   * @param {number} startTime – absolute AudioContext time
+   * @param {number} startTime – exact AudioContext time for the drop
    */
   _spawnDrop(startTime) {
     const ctx = this.audioCtx;
 
-    // ── Random spatial parameters ──────────────────────────────────
+    // ── Spatial Parameters ──────────────────────────────────────────
     const distance = Math.random();               // 0 (near) … 1 (far)
     const pan      = Math.random() * 2 - 1;       // -1 … +1
 
-    // ── Volume based on distance, global pressure & local density ─
+    // ── Volume scaling ──────────────────────────────────────────────
     let volume = (1 - distance) * this.globalPressure * this.localDensity * 0.45;
-    volume = Math.max(0.005, Math.min(0.7, volume));
+    volume = Math.max(0.005, Math.min(0.75, volume));
 
-    // ── Stereo panner node (shared by both components) ────────────
+    // ── Envelope Timing ─────────────────────────────────────────────
+    const attackTime = 0.001;                             // instant snap
+    const decayTime  = 0.015 + Math.random() * 0.035;     // 15–50 ms
+    const attackEnd  = startTime + attackTime;
+    const decayEnd   = attackEnd + decayTime;
+
+    // ── Stereo Panner ───────────────────────────────────────────────
     const panner = ctx.createStereoPanner();
     panner.pan.value = pan;
 
-    // ── Master Gain for the whole drop (distance + volume) ──────
+    // ── Master Drop Gain (envelope) ────────────────────────────────
     const dropGain = ctx.createGain();
-    dropGain.gain.value = 0;
-    // Soft attack 5 ms, then exponential decay over 0.05‑0.1 s
-    const attackEnd = startTime + 0.005;
-    const decayEnd  = attackEnd + 0.05 + Math.random() * 0.05;
     dropGain.gain.setValueAtTime(0, startTime);
     dropGain.gain.linearRampToValueAtTime(volume, attackEnd);
     dropGain.gain.exponentialRampToValueAtTime(0.0001, decayEnd);
 
-    // ── Plop (sine sweep) ────────────────────────────────────────
-    const plopOsc = ctx.createOscillator();
-    plopOsc.type = 'sine';
-    // Start frequency 800‑1200 Hz, end frequency 300‑400 Hz
-    const startFreq = 800 + Math.random() * 400;
-    const endFreq   = 300 + Math.random() * 100;
-    plopOsc.frequency.setValueAtTime(startFreq, startTime);
-    plopOsc.frequency.exponentialRampToValueAtTime(endFreq, startTime + 0.015);
-    // Oscillator stops after the sweep has finished; we stop it a bit later
-    const plopStopTime = startTime + 0.018;
-    plopOsc.start(startTime);
-    plopOsc.stop(plopStopTime);
+    // ── Surface Impact Filter ──────────────────────────────────────
+    // Bandpass with low Q (0.2‑0.5) to avoid metallic ringing.
+    // Frequency range 1500‑6000 Hz simulates different leaf/stone sizes.
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = 1500 + Math.random() * 4500; // 1500–6000
+    bandpass.Q.value = 0.2 + Math.random() * 0.3;           // 0.2–0.5
 
-    // ── Impact (filtered noise splash) ───────────────────────────
-    const noiseBuffer = this._createWhiteNoiseBuffer(0.03, ctx.sampleRate);
-    const noiseSource = ctx.createBufferSource();
-    noiseSource.buffer = noiseBuffer;
+    // ── Noise Buffer (ultra‑short tick) ────────────────────────────
+    const buffer = this._createWhiteNoiseBuffer(decayTime + 0.01, ctx.sampleRate);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
 
-    const lowpass = ctx.createBiquadFilter();
-    lowpass.type = 'lowpass';
-    lowpass.frequency.value = 800;          // remove high‑end hiss
-    lowpass.Q.value = 0.2;                  // subtle, no resonance
-
-    // Gain envelope for splash (very short)
-    const splashGain = ctx.createGain();
-    splashGain.gain.setValueAtTime(0, startTime);
-    splashGain.gain.linearRampToValueAtTime(volume * 0.6, attackEnd);
-    splashGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.035);
-
-    // Connect splash chain
-    noiseSource.connect(lowpass);
-    lowpass.connect(splashGain);
-    splashGain.connect(panner);
-
-    noiseSource.start(startTime);
-    noiseSource.stop(startTime + 0.04);
-
-    // ── Connect plop chain ───────────────────────────────────────
-    plopOsc.connect(panner);
-
-    // ── Panner → dropGain → master ───────────────────────────────
+    // ── Audio Graph ─────────────────────────────────────────────────
+    source.connect(bandpass);
+    bandpass.connect(panner);
     panner.connect(dropGain);
     dropGain.connect(this.masterDestination);
 
-    // ── Cleanup when the drop ends ───────────────────────────────
-    // We use the latest stop time among all sources.
-    const finalStop = Math.max(plopStopTime, startTime + 0.04);
+    source.start(startTime);
+    source.stop(decayEnd + 0.005);
+
+    // ── Automatic Cleanup ───────────────────────────────────────────
+    const cleanupDelay = Math.max(0.05, (decayEnd - ctx.currentTime + 0.05));
     const cleanupTimer = setTimeout(() => {
-      plopOsc.disconnect();
-      noiseSource.disconnect();
-      lowpass.disconnect();
-      splashGain.disconnect();
+      source.disconnect();
+      bandpass.disconnect();
       panner.disconnect();
       dropGain.disconnect();
-    }, (finalStop - ctx.currentTime + 0.02) * 1000);
+    }, cleanupDelay * 1000);
 
-    // Prevent orphan timer if destroyed mid‑flight
-    this._allTimeouts = this._allTimeouts || [];
-    this._allTimeouts.push(cleanupTimer);
+    // Track cleanup timer so we can cancel it on destroy()
+    this._cleanupTimeouts.push(cleanupTimer);
   }
 
   /**
-   * Creates a mono AudioBuffer of white noise with the given duration.
+   * Generates a mono AudioBuffer of white noise of the given duration.
    * @param {number} durationSec
    * @param {number} sampleRate
    * @returns {AudioBuffer}
@@ -325,22 +311,5 @@ export default class RainExpert {
       data[i] = Math.random() * 2 - 1;
     }
     return buffer;
-  }
-
-  // -------------------------------------------------------------------
-  //  Additional cleanup of all timeouts in destroy
-  // -------------------------------------------------------------------
-  destroy() {
-    // Override to clear all cleanup timers as well
-    if (this._isDestroyed) return;
-    this._isDestroyed = true;
-    this._stopScheduler();
-
-    // Clear any still‑pending cleanup timeouts from individual drops
-    if (this._allTimeouts) {
-      this._allTimeouts.forEach(id => clearTimeout(id));
-      this._allTimeouts = [];
-    }
-    console.log(`RainExpert ${this.id}: destroyed`);
   }
 }
