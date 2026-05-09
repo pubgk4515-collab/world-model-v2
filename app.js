@@ -6,10 +6,10 @@
  * instantiation/removal. It is the only JavaScript file needed on top of
  * the pre-built index.html skeleton.
  *
- * Expert modules (e.g. RainExpert) are imported statically and must conform
- * to the required interface (getUICard, bindCardControls, onWorldStateUpdate,
- * destroy). The audio master bus feeds all expert audio through a low-pass
- * filter and a limiter before reaching the system output.
+ * Expert modules (e.g. RainExpert, WindExpert) are imported statically and
+ * must conform to the required interface (getUICard, bindCardControls,
+ * onWorldStateUpdate, destroy). The audio master bus feeds all expert audio
+ * through a low-pass filter and a limiter before reaching the system output.
  *
  * Architecture:
  *  - Global AudioContext and master chain (created lazily on first user
@@ -23,24 +23,23 @@
 // ---------------------------------------------------------------------------
 // Static Imports (expert modules)
 // ---------------------------------------------------------------------------
-import RainExpert from './expert_rain.js';   // Future native module
+import RainExpert from './expert_rain.js';
 import WindExpert from './expert_wind.js';
-
 
 // ---------------------------------------------------------------------------
 // Audio Engine Globals
 // ---------------------------------------------------------------------------
-let audioCtx = null;            // The single shared AudioContext
-let masterBus = null;          // GainNode that sums all expert outputs
-let globalLowPassFilter = null;// BiquadFilter – enclosure-tailored LPF
-let compressor = null;         // DynamicsCompressor acting as limiter
+let audioCtx = null;             // The single shared AudioContext
+let masterBus = null;            // GainNode that sums all expert outputs
+let globalLowPassFilter = null;  // BiquadFilter – enclosure-tailored LPF
+let compressor = null;           // DynamicsCompressor acting as limiter
 
 // ---------------------------------------------------------------------------
 // Global World State (single source of truth)
 // ---------------------------------------------------------------------------
 const currentState = {
-  atmosphericPressure: 0.5,    // Range 0.0 – 1.0 (matched to #pressureSlider)
-  enclosure: 'open',           // 'open' | 'umbrella' | 'indoor'
+  atmosphericPressure: 0.5, // Range 0.0 – 1.0 (matched to #pressureSlider)
+  enclosure: 'open',        // 'open' | 'umbrella' | 'indoor'
 };
 
 // ---------------------------------------------------------------------------
@@ -85,25 +84,23 @@ async function initEngine() {
     }
 
     // ── Master Audio Chain ──────────────────────────────────────────
-    // inputBus (masterBus) → globalLowPassFilter → compressor → destination
+    // masterBus → globalLowPassFilter → compressor → destination
 
     masterBus = audioCtx.createGain();
-    masterBus.gain.value = 1.0;          // Unity gain – sum point for experts
+    masterBus.gain.value = 1.0;
 
     globalLowPassFilter = audioCtx.createBiquadFilter();
     globalLowPassFilter.type = 'lowpass';
-    globalLowPassFilter.frequency.value = 20000; // Wide open by default
-    globalLowPassFilter.Q.value = 0.7;           // Gentle slope
+    globalLowPassFilter.frequency.value = 20000;
+    globalLowPassFilter.Q.value = 0.7;
 
     compressor = audioCtx.createDynamicsCompressor();
-    // Configured as a transparent limiter to protect output hardware
-    compressor.threshold.value = -1.0;   // dBFS – catch peaks near 0 dB
-    compressor.knee.value = 0.0;         // Hard knee for brickwall limiting
-    compressor.ratio.value = 20.0;       // High ratio
-    compressor.attack.value = 0.005;     // 5 ms – fast enough for transients
-    compressor.release.value = 0.05;     // 50 ms – quick recovery
+    compressor.threshold.value = -1.0;
+    compressor.knee.value = 0.0;
+    compressor.ratio.value = 20.0;
+    compressor.attack.value = 0.005;
+    compressor.release.value = 0.05;
 
-    // Wire the chain
     masterBus.connect(globalLowPassFilter);
     globalLowPassFilter.connect(compressor);
     compressor.connect(audioCtx.destination);
@@ -111,7 +108,7 @@ async function initEngine() {
     console.log('✅ Audio engine initialised. Master bus active.');
   } catch (err) {
     console.error('❌ Audio engine init failure:', err);
-    throw err; // Re-throw so calling code can handle
+    throw err;
   }
 }
 
@@ -125,7 +122,6 @@ async function initEngine() {
 function updateState(changes) {
   Object.assign(currentState, changes);
 
-  // Propagate to all running experts
   activeExperts.forEach((expert) => {
     if (typeof expert.onWorldStateUpdate === 'function') {
       expert.onWorldStateUpdate(currentState);
@@ -156,8 +152,7 @@ pressureSlider.addEventListener('input', (e) => {
       sliderValueIndicator.textContent = value.toFixed(2);
     }
 
-    // First interaction may also need to trigger audio init
-    if (!audioCtx) initEngine(); // Fire‑and‑forget (no await needed here)
+    if (!audioCtx) initEngine();
 
     updateState({ atmosphericPressure: value });
   } catch (err) {
@@ -179,7 +174,7 @@ enclosureSelect.addEventListener('change', (e) => {
 });
 
 // 4.3 "Add Acoustic Expert" Button
-addLayerBtn.addEventListener('click', async (e) => {
+addLayerBtn.addEventListener('click', async () => {
   try {
     await initEngine();
     openModal();
@@ -189,7 +184,7 @@ addLayerBtn.addEventListener('click', async (e) => {
   }
 });
 
-// 4.4 Close modal when clicking the semi‑transparent backdrop
+// 4.4 Close modal when clicking the semi-transparent backdrop
 layerModal.addEventListener('click', (e) => {
   try {
     if (e.target === layerModal) {
@@ -224,32 +219,40 @@ layerModal.addEventListener('click', async (e) => {
       throw new Error('Audio engine not properly initialised. Tap "Add Expert" again.');
     }
 
-        // ---- Instantiate the requested expert ----
     let expert = null;
 
-    if (expertType === 'rain') {
-      expert = new RainExpert(audioCtx, masterBus);
-    } else if (expertType === 'wind') {
-      expert = new WindExpert(audioCtx, masterBus);
-    } else {
-      throw new Error(`Unknown expert type: "${expertType}"`);
+    switch (expertType) {
+      case 'rain':
+        expert = new RainExpert(audioCtx, masterBus);
+        break;
+
+      case 'wind':
+        expert = new WindExpert(audioCtx, masterBus);
+        break;
+
+      default:
+        throw new Error(`Unknown expert type: "${expertType}"`);
     }
 
-    // Har expert ke paas apna internal .id hota hai (from constructor)
-    const id = expert.id; 
+    if (!expert || !expert.id) {
+      throw new Error(`Failed to create expert: "${expertType}"`);
+    }
+
+    // Store instance
+    const id = expert.id;
     activeExperts.set(id, expert);
 
-    // Expert card UI generate karo aur Rack mein daalo
+    // Create card UI and append it to the rack
     const uiCardHTML = expert.getUICard();
     expertRack.insertAdjacentHTML('beforeend', uiCardHTML);
-    
-    // Last added card ko pakdo aur controls bind karo
+
+    // Bind controls on the newly inserted card
     const card = expertRack.lastElementChild;
     expert.bindCardControls(card);
 
-    // Immediately sync with the current world state
+    // Sync immediately with the current world state
     expert.onWorldStateUpdate(currentState);
-    
+
     console.log(`✨ Expert Added: ${expertType} (ID: ${id})`);
     closeModal();
   } catch (err) {
@@ -302,10 +305,12 @@ function fallbackUUID() {
 // ---------------------------------------------------------------------------
 // Final Initialisation
 // ---------------------------------------------------------------------------
-if (sliderValueIndicator) {
+if (sliderValueIndicator && pressureSlider) {
   sliderValueIndicator.textContent = pressureSlider.value;
 }
-currentState.enclosure = enclosureSelect.value;
+if (enclosureSelect) {
+  currentState.enclosure = enclosureSelect.value;
+}
 
 // Expose internal state for debugging (can be removed in production)
 window.__symbioteState = currentState;
