@@ -265,7 +265,7 @@ export default class RainExpert {
     // ── Filter 1: Lowpass (Kills the Kurkure Hiss) ──────────────────
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = 'lowpass';
-    lowpass.frequency.value = 1800 + Math.random() * 1200; // 3500Hz - 5500Hz
+    lowpass.frequency.value = 1500 + Math.random() * 1000; // 3500Hz - 5500Hz
     lowpass.Q.value = 0.5;
 
     // ── Filter 2: Highpass (Kills the Muffled Mud/Distortion) ───────
