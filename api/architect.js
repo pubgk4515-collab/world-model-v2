@@ -1,292 +1,230 @@
-// /api/architect.js
-// Symbiote Studio — Architect Console API
-// Vercel Serverless Function
+// api/architect.js
+// ------------------------------------------------------------
+// Symbiote Studio — Architect API
+// Phase 1: Structured JSON Patch Responses
+// ------------------------------------------------------------
 
-export const config = {
-    runtime: 'edge'
-};
+export default async function handler(req, res) {
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-
-export default async function handler(req) {
-
-    // =====================================================
-    // CORS
-    // =====================================================
-
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Content-Type': 'application/json'
-    };
-
-    // =====================================================
-    // PRE-FLIGHT
-    // =====================================================
-
-    if (req.method === 'OPTIONS') {
-        return new Response(null, {
-            status: 204,
-            headers: corsHeaders
-        });
-    }
-
-    // =====================================================
-    // METHOD CHECK
-    // =====================================================
+    // --------------------------------------------------------
+    // METHOD
+    // --------------------------------------------------------
 
     if (req.method !== 'POST') {
 
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                error: 'Only POST allowed.'
-            }),
-            {
-                status: 405,
-                headers: corsHeaders
-            }
-        );
+        return res.status(405).json({
+            error: 'Method not allowed'
+        });
     }
 
-    // =====================================================
+    // --------------------------------------------------------
     // ENV
-    // =====================================================
+    // --------------------------------------------------------
 
-    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    const apiKey =
+        process.env.OPENAI_API_KEY;
 
-    if (!OPENAI_API_KEY) {
+    if (!apiKey) {
 
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                error: 'OPENAI_API_KEY missing.'
-            }),
-            {
-                status: 500,
-                headers: corsHeaders
-            }
-        );
+        return res.status(500).json({
+            error:
+                'OPENAI_API_KEY missing'
+        });
     }
-
-    // =====================================================
-    // BODY
-    // =====================================================
-
-    let body;
 
     try {
 
-        body = await req.json();
+        // ----------------------------------------------------
+        // BODY
+        // ----------------------------------------------------
 
-    } catch (err) {
+        const {
+            prompt = '',
+            projectContext = {},
+            runtimeErrors = [],
+            runtimeWarnings = [],
+            files = []
+        } = req.body || {};
 
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                error: 'Invalid JSON body.'
-            }),
-            {
-                status: 400,
-                headers: corsHeaders
-            }
-        );
-    }
+        // ----------------------------------------------------
+        // SYSTEM PROMPT
+        // ----------------------------------------------------
 
-    const {
-        prompt = '',
-        projectContext = '',
-        consoleLogs = '',
-        selectedFiles = [],
-        mode = 'architect'
-    } = body;
-
-    // =====================================================
-    // VALIDATION
-    // =====================================================
-
-    if (!prompt || typeof prompt !== 'string') {
-
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                error: 'Prompt required.'
-            }),
-            {
-                status: 400,
-                headers: corsHeaders
-            }
-        );
-    }
-
-    // =====================================================
-    // SYSTEM PROMPT
-    // =====================================================
-
-    const SYSTEM_PROMPT = `
-You are "Symbiote Architect".
-
-You are a senior:
-- AI Systems Engineer
-- Full Stack Architect
-- Audio DSP Engineer
-- Mobile UX Engineer
-- Runtime Debugger
+        const systemPrompt = `
+You are Architect Runtime,
+an autonomous software engineering AI.
 
 Your job:
-1. Scan project context
-2. Find root causes
-3. Explain EXACT broken files
-4. Generate DIRECT production-ready fixes
-5. NEVER give vague advice
-6. NEVER simplify solutions
-7. ALWAYS preserve existing architecture
-8. ALWAYS return COMPLETE code patches
+- analyze runtime problems
+- inspect project structure
+- generate SAFE structured patches
+
+IMPORTANT RULES:
+
+1. NEVER return markdown.
+2. NEVER return explanations outside JSON.
+3. NEVER return prose outside JSON.
+4. ONLY return valid JSON.
+5. Response must always be machine-readable.
+
+Patch format:
+
+{
+  "summary": "short summary",
+  "risk": "low | medium | high",
+  "files": [
+    {
+      "path": "relative/file.js",
+      "operation": "replace | append | create | delete",
+      "find": "old code",
+      "replace": "new code"
+    }
+  ]
+}
 
 Rules:
-- Think step-by-step internally
-- Prefer surgical fixes
-- Detect audio bugs
-- Detect event listener bugs
-- Detect mobile interaction issues
-- Detect DOM lifecycle bugs
-- Detect async timing bugs
-- Detect WebAudio mistakes
-- Detect import/export mismatches
-- Detect constructor signature mismatches
-- Detect UI dead states
-- Detect memory leaks
-- Detect scroll locking issues
+- keep fixes minimal
+- avoid rewriting huge files
+- preserve existing architecture
+- prioritize runtime stability
+- avoid destructive edits
+- avoid deleting logic unless necessary
 
-When returning fixes:
-- Mention file paths
-- Mention exact broken lines if possible
-- Return code blocks
-- Keep formatting clean
-- Never omit critical code
-
-Project Type:
-Procedural atmospheric audio engine
-with modular experts and mobile-first runtime.
+If uncertain:
+- return low-risk guards
+- null checks
+- method existence checks
+- syntax-safe patches
 `;
 
-    // =====================================================
-    // USER PAYLOAD
-    // =====================================================
+        // ----------------------------------------------------
+        // USER PAYLOAD
+        // ----------------------------------------------------
 
-    const USER_PROMPT = `
-# MODE
-${mode}
+        const userPayload = {
+            issue: prompt,
+            runtimeErrors,
+            runtimeWarnings,
+            projectContext,
+            files
+        };
 
-# USER REQUEST
-${prompt}
-
-# CONSOLE LOGS
-${consoleLogs}
-
-# PROJECT CONTEXT
-${projectContext}
-
-# SELECTED FILES
-${Array.isArray(selectedFiles)
-? selectedFiles.join('\n')
-: ''
-}
-`;
-
-    // =====================================================
-    // OPENAI REQUEST
-    // =====================================================
-
-    try {
+        // ----------------------------------------------------
+        // OPENAI REQUEST
+        // ----------------------------------------------------
 
         const response = await fetch(
-            OPENAI_URL,
+            'https://api.openai.com/v1/chat/completions',
             {
                 method: 'POST',
 
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${OPENAI_API_KEY}`
+                    'Content-Type':
+                        'application/json',
+
+                    Authorization:
+                        `Bearer ${apiKey}`
                 },
 
                 body: JSON.stringify({
 
-                    model: 'gpt-4.1',
+                    model:
+                        'gpt-5.5',
 
-                    temperature: 0.2,
+                    temperature:
+                        0.15,
 
                     messages: [
 
                         {
                             role: 'system',
-                            content: SYSTEM_PROMPT
+                            content: systemPrompt
                         },
 
                         {
                             role: 'user',
-                            content: USER_PROMPT
+                            content:
+                                JSON.stringify(
+                                    userPayload,
+                                    null,
+                                    2
+                                )
                         }
                     ]
                 })
             }
         );
 
-        // =================================================
+        // ----------------------------------------------------
         // OPENAI FAILURE
-        // =================================================
+        // ----------------------------------------------------
 
         if (!response.ok) {
 
-            const errText = await response.text();
+            const errorText =
+                await response.text();
 
-            return new Response(
-                JSON.stringify({
-                    ok: false,
-                    error: 'OpenAI request failed.',
-                    details: errText
-                }),
-                {
-                    status: 500,
-                    headers: corsHeaders
-                }
+            console.error(
+                '[Architect API] OpenAI Error:',
+                errorText
             );
+
+            return res.status(500).json({
+                error:
+                    'OpenAI request failed',
+                details:
+                    errorText
+            });
         }
 
-        // =================================================
-        // SUCCESS
-        // =================================================
+        // ----------------------------------------------------
+        // OPENAI DATA
+        // ----------------------------------------------------
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
-        const output =
-            data?.choices?.[0]?.message?.content
-            || 'No response generated.';
+        const content =
+            data?.choices?.[0]
+                ?.message?.content;
 
-        return new Response(
-            JSON.stringify({
-                ok: true,
-                response: output
-            }),
-            {
-                status: 200,
-                headers: corsHeaders
-            }
-        );
+        if (!content) {
+
+            return res.status(500).json({
+                error:
+                    'Empty AI response'
+            });
+        }
+
+        // ----------------------------------------------------
+        // RESPONSE
+        // ----------------------------------------------------
+
+        return res.status(200).json({
+
+            ok: true,
+
+            raw:
+                content,
+
+            usage:
+                data.usage || null
+        });
 
     } catch (err) {
 
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                error: 'Architect runtime failed.',
-                details: err.message
-            }),
-            {
-                status: 500,
-                headers: corsHeaders
-            }
+        console.error(
+            '[Architect API] Fatal Error:',
+            err
         );
+
+        return res.status(500).json({
+
+            error:
+                'Architect runtime failure',
+
+            details:
+                err.message || String(err)
+        });
     }
 }
