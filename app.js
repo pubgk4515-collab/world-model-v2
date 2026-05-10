@@ -47,21 +47,13 @@ const sheet = layerModal?.querySelector('.sheet');
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function uuid() {
-  if (window.crypto?.randomUUID) return crypto.randomUUID();
-
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
 function clamp01(value) {
   return Math.min(1, Math.max(0, value));
 }
 
 function setRangeFill(input, value) {
+  if (!input) return;
+
   const pct = Math.round(clamp01(value) * 100);
   input.style.background = `linear-gradient(
     90deg,
@@ -74,9 +66,11 @@ function setRangeFill(input, value) {
 
 function syncPressureUI(value) {
   const v = clamp01(value);
+
   if (pressureValue) {
     pressureValue.textContent = v.toFixed(2);
   }
+
   if (pressureSlider) {
     setRangeFill(pressureSlider, v);
   }
@@ -93,6 +87,21 @@ function syncStateToExperts() {
 function updateState(changes) {
   Object.assign(currentState, changes);
   syncStateToExperts();
+}
+
+function fallbackUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function getExpertId(expert) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return expert?.id || crypto.randomUUID();
+  }
+  return expert?.id || fallbackUUID();
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +153,7 @@ async function initEngine() {
 // ---------------------------------------------------------------------------
 function openModal() {
   if (!layerModal) return;
+
   layerModal.classList.add('open', 'active');
   layerModal.setAttribute('aria-hidden', 'false');
   document.documentElement.style.overflow = 'hidden';
@@ -151,16 +161,10 @@ function openModal() {
 
 function closeModal() {
   if (!layerModal) return;
+
   layerModal.classList.remove('open', 'active');
   layerModal.setAttribute('aria-hidden', 'true');
   document.documentElement.style.overflow = '';
-}
-
-// Optional: prevent clicks inside sheet from bubbling to overlay close logic
-if (sheet) {
-  sheet.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -183,9 +187,11 @@ function createExpertByType(type) {
 }
 
 function addExpertToRack(expert) {
-  if (!expert || !expert.id) {
+  if (!expert) {
     throw new Error('Expert instance is invalid.');
   }
+
+  expert.id = getExpertId(expert);
 
   if (typeof expert.getUICard !== 'function') {
     throw new Error('Expert is missing getUICard().');
@@ -258,8 +264,8 @@ if (addLayerBtn) {
   });
 }
 
+// Backdrop close
 if (layerModal) {
-  // Close when tapping backdrop
   layerModal.addEventListener('click', (e) => {
     try {
       if (e.target === layerModal) {
@@ -270,9 +276,11 @@ if (layerModal) {
       alert('Modal dismissal error: ' + err.message);
     }
   });
+}
 
-  // Handle expert selection buttons
-  layerModal.addEventListener('click', async (e) => {
+// Sheet click handling (THIS is the important fix)
+if (sheet) {
+  sheet.addEventListener('click', async (e) => {
     try {
       const btn = e.target.closest('.sheet-btn');
       if (!btn) return;
@@ -349,7 +357,9 @@ document.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------------------
 // Final Initialisation
 // ---------------------------------------------------------------------------
-syncPressureUI(pressureSlider ? parseFloat(pressureSlider.value) : 0.5);
+if (pressureSlider) {
+  syncPressureUI(parseFloat(pressureSlider.value || '0.5'));
+}
 
 if (enclosureSelect) {
   currentState.enclosure = enclosureSelect.value;
@@ -358,7 +368,9 @@ if (enclosureSelect) {
 window.__symbioteState = currentState;
 window.__activeExperts = activeExperts;
 
-// Cleanup on page hide
+// ---------------------------------------------------------------------------
+// Cleanup
+// ---------------------------------------------------------------------------
 window.addEventListener('pagehide', () => {
   activeExperts.forEach((expert) => {
     try {
@@ -369,6 +381,7 @@ window.addEventListener('pagehide', () => {
       // ignore cleanup errors
     }
   });
+
   activeExperts.clear();
 
   if (audioCtx) {
