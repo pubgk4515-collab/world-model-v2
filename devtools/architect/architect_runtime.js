@@ -91,7 +91,7 @@ export default class ArchitectRuntime {
 
                 this.renderer =
                     new ArchitectRenderer(
-                        this.root
+                        this.output
                     );
 
             } catch (err) {

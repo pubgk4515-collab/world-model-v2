@@ -1,7 +1,7 @@
 // /devtools/architect/architect_panel.js
 // -----------------------------------------------------------------------------
 // Symbiote Studio — Architect Console Panel
-// Production-Stable Runtime Edition
+// Bulletproof Runtime Edition
 // -----------------------------------------------------------------------------
 
 import ArchitectRenderer
@@ -46,6 +46,10 @@ export function createArchitectPanel() {
 
     root.id =
         'architect-console-root';
+
+    // -------------------------------------------------------------------------
+    // HTML
+    // -------------------------------------------------------------------------
 
     root.innerHTML = `
         <div
@@ -191,6 +195,10 @@ Audio crackling on Android."
         </div>
     `;
 
+    // -------------------------------------------------------------------------
+    // APPEND
+    // -------------------------------------------------------------------------
+
     document.body.appendChild(root);
 
     // -------------------------------------------------------------------------
@@ -259,22 +267,6 @@ Audio crackling on Android."
         );
 
     // -------------------------------------------------------------------------
-    // DOM DEBUG
-    // -------------------------------------------------------------------------
-
-    console.log({
-
-        promptEl,
-        resultEl,
-        scanBtn,
-        fixBtn,
-        closeBtn,
-        includeDOM,
-        includeConsole,
-        includeAudio
-    });
-
-    // -------------------------------------------------------------------------
     // DOM VALIDATION
     // -------------------------------------------------------------------------
 
@@ -284,7 +276,10 @@ Audio crackling on Android."
         resultEl,
         scanBtn,
         fixBtn,
-        closeBtn
+        closeBtn,
+        includeDOM,
+        includeConsole,
+        includeAudio
     };
 
     for (
@@ -301,23 +296,45 @@ Audio crackling on Android."
     }
 
     // -------------------------------------------------------------------------
+    // DEBUG
+    // -------------------------------------------------------------------------
+
+    console.log({
+
+        promptEl,
+        resultEl,
+        scanBtn,
+        fixBtn,
+        closeBtn,
+        includeDOM,
+        includeConsole,
+        includeAudio
+    });
+
+    // -------------------------------------------------------------------------
     // RENDERER
+    // IMPORTANT:
+    // Renderer ONLY controls result area.
+    // NEVER pass panelRoot here.
     // -------------------------------------------------------------------------
 
     const renderer =
         new ArchitectRenderer(
-            panelRoot
+            resultEl
         );
 
     // -------------------------------------------------------------------------
     // RUNTIME
+    // IMPORTANT:
+    // Runtime renderer target MUST be resultEl.
+    // Otherwise renderer nukes full panel UI.
     // -------------------------------------------------------------------------
 
     const runtime =
         new ArchitectRuntime({
 
             root:
-                panelRoot,
+                resultEl,
 
             output:
                 resultEl,
@@ -334,7 +351,7 @@ Audio crackling on Android."
 
     // -------------------------------------------------------------------------
     // SCANNER WRAPPER
-    // -------------------------------------------------------------------------
+    // -----------------------------------------------------------------------------
 
     const scanner = {
 
@@ -343,6 +360,7 @@ Audio crackling on Android."
             try {
 
                 // DEFAULT EXPORT
+
                 if (
                     typeof ScannerModule.default ===
                     'function'
@@ -354,7 +372,8 @@ Audio crackling on Android."
                         );
                 }
 
-                // FACTORY
+                // FACTORY EXPORT
+
                 if (
                     typeof
                     ScannerModule
@@ -379,7 +398,8 @@ Audio crackling on Android."
                     }
                 }
 
-                // scanProject()
+                // NAMED EXPORT
+
                 if (
                     typeof
                     ScannerModule.scanProject ===
@@ -457,7 +477,7 @@ Audio crackling on Android."
             } catch (err) {
 
                 console.error(
-                    '[Prompt Builder]',
+                    '[Prompt Builder Error]',
                     err
                 );
             }
@@ -482,7 +502,8 @@ ${JSON.stringify(
     // STATE
     // -------------------------------------------------------------------------
 
-    let latestScan = null;
+    let latestScan =
+        null;
 
     // -------------------------------------------------------------------------
     // SCAN
@@ -492,7 +513,8 @@ ${JSON.stringify(
 
         try {
 
-            scanBtn.disabled = true;
+            scanBtn.disabled =
+                true;
 
             renderer.renderLoading(
                 resultEl,
@@ -503,13 +525,13 @@ ${JSON.stringify(
                 await scanner.scan({
 
                     includeDOM:
-                        includeDOM?.checked ?? true,
+                        includeDOM.checked,
 
                     includeConsole:
-                        includeConsole?.checked ?? true,
+                        includeConsole.checked,
 
                     includeAudio:
-                        includeAudio?.checked ?? true
+                        includeAudio.checked
                 });
 
             renderer.renderScanResult(
@@ -529,7 +551,8 @@ ${JSON.stringify(
 
         } finally {
 
-            scanBtn.disabled = false;
+            scanBtn.disabled =
+                false;
         }
     }
 
@@ -542,7 +565,7 @@ ${JSON.stringify(
         try {
 
             const userPrompt =
-                promptEl?.value?.trim();
+                promptEl.value.trim();
 
             if (!userPrompt) {
 
@@ -554,31 +577,38 @@ ${JSON.stringify(
                 return;
             }
 
-            fixBtn.disabled = true;
+            fixBtn.disabled =
+                true;
 
             renderer.renderLoading(
                 resultEl,
                 'Generating AI repair plan...'
             );
 
+            // -----------------------------------------------------------------
             // AUTO SCAN
+            // -----------------------------------------------------------------
+
             if (!latestScan) {
 
                 latestScan =
                     await scanner.scan({
 
                         includeDOM:
-                            includeDOM?.checked ?? true,
+                            includeDOM.checked,
 
                         includeConsole:
-                            includeConsole?.checked ?? true,
+                            includeConsole.checked,
 
                         includeAudio:
-                            includeAudio?.checked ?? true
+                            includeAudio.checked
                     });
             }
 
+            // -----------------------------------------------------------------
             // BUILD PROMPT
+            // -----------------------------------------------------------------
+
             const finalPrompt =
                 promptBuilder.build({
 
@@ -586,12 +616,19 @@ ${JSON.stringify(
                     scan: latestScan
                 });
 
+            // -----------------------------------------------------------------
             // AI CALL
+            // -----------------------------------------------------------------
+
             const response =
                 await runtime.askArchitect(
                     finalPrompt,
                     latestScan
                 );
+
+            // -----------------------------------------------------------------
+            // RENDER
+            // -----------------------------------------------------------------
 
             renderer.renderResponse(
                 resultEl,
@@ -610,7 +647,8 @@ ${JSON.stringify(
 
         } finally {
 
-            fixBtn.disabled = false;
+            fixBtn.disabled =
+                false;
         }
     }
 
