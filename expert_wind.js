@@ -513,8 +513,8 @@ const bedB =
   ) * 0.028;
 
     const output =
-      0.38 +
-      energy * 0.12;
+  0.16 +
+  Math.pow(energy, 1.5) * 0.34;
 
     // ======================================================
     // FILTERS
@@ -533,8 +533,10 @@ const bedB =
     // ======================================================
 
     const panDepth =
-      0.04 +
-      this.state.width * 0.14;
+  (
+    0.01 +
+    this.state.width * 0.10
+  ) * Math.pow(energy, 0.8);
 
     // ======================================================
 
@@ -561,9 +563,13 @@ const bedB =
     set(this.panDepth.gain, panDepth);
 
     set(
-      this.filterDepth.gain,
-      60 + this.state.air * 120
-    );
+  this.filterDepth.gain,
+  8 +
+  (
+    this.state.air *
+    Math.pow(energy, 1.4)
+  ) * 90
+);
   }
 
   // --------------------------------------------------------
