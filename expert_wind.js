@@ -1,18 +1,10 @@
 /**
  * expert_wind.js
- * Gentle, natural, sleep-friendly procedural wind expert
- * for Symbiote Studio.
- *
- * Goals:
- * - smooth continuous airflow
- * - subtle swells instead of breathy pumping
- * - enclosure-aware shaping
- * - slow stereo drift
- * - very soft gust events with long envelopes
- * - mobile-safe card UI
+ * Audible, smooth, natural wind expert for Symbiote Studio.
+ * Sliders directly affect the sound so you can actually hear changes.
  */
 
-const WIND_STYLE_ID = 'wind-expert-style-v2';
+const WIND_STYLE_ID = 'wind-expert-style-audible-v1';
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -30,19 +22,19 @@ function randomRange(min, max) {
   return min + Math.random() * (max - min);
 }
 
-function pickEnclosureFactor(enclosure) {
+function enclosureFactor(enclosure) {
   switch (enclosure) {
     case 'indoor':
-      return 0.12;
+      return 0.22;
     case 'umbrella':
-      return 0.45;
+      return 0.58;
     case 'open':
     default:
-      return 1.0;
+      return 1;
   }
 }
 
-function pickEnclosureLabel(enclosure) {
+function enclosureLabel(enclosure) {
   switch (enclosure) {
     case 'indoor':
       return 'Indoor hush';
@@ -54,7 +46,7 @@ function pickEnclosureLabel(enclosure) {
   }
 }
 
-function ensureWindStyles() {
+function ensureStyles() {
   if (document.getElementById(WIND_STYLE_ID)) return;
 
   const style = document.createElement('style');
@@ -74,17 +66,6 @@ function ensureWindStyles() {
       -webkit-backdrop-filter: blur(22px);
       padding: 16px 16px 14px;
       color: rgba(255,255,255,0.94);
-    }
-
-    .expert-card.wind-expert::before {
-      content: "";
-      position: absolute;
-      inset: -1px;
-      pointer-events: none;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,0.10), transparent 22%, transparent 78%, rgba(255,255,255,0.04));
-      opacity: 0.38;
-      mix-blend-mode: screen;
     }
 
     .wind-top {
@@ -286,30 +267,21 @@ function ensureWindStyles() {
 
 export default class WindExpert {
   constructor(audioCtx, masterBus) {
-    if (!audioCtx) {
-      throw new Error('WindExpert requires a valid AudioContext.');
-    }
-    if (!masterBus) {
-      throw new Error('WindExpert requires a valid master bus GainNode.');
-    }
+    if (!audioCtx) throw new Error('WindExpert requires a valid AudioContext.');
+    if (!masterBus) throw new Error('WindExpert requires a valid master bus GainNode.');
 
-    ensureWindStyles();
+    ensureStyles();
 
     this.audioCtx = audioCtx;
     this.masterBus = masterBus;
-
-    this.id =
-      (window.crypto?.randomUUID?.() ||
-        `wind-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-
+    this.id = window.crypto?.randomUUID?.() || `wind-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     this.type = 'wind';
 
-    // Softer defaults — designed to feel like a gentle night breeze.
     this.state = {
-      intensity: 0.38,
-      gust: 0.12,
-      texture: 0.56,
-      width: 0.58,
+      intensity: 0.60,
+      swell: 0.22,
+      texture: 0.48,
+      width: 0.62,
     };
 
     this.world = {
@@ -318,71 +290,44 @@ export default class WindExpert {
     };
 
     this.destroyed = false;
-    this.gustTimer = null;
+    this.swellTimer = null;
     this.card = null;
     this.controls = {};
     this.readouts = {};
 
     this._buildGraph();
     this._applyStateToAudio(true);
-    this._startSchedulers();
+    this._startScheduler();
   }
 
-  _createSmoothNoiseBuffer(durationSeconds = 6.0) {
+  _createNoiseBuffer(seconds = 8) {
     const sr = this.audioCtx.sampleRate;
-    const frames = Math.max(1, Math.floor(durationSeconds * sr));
+    const frames = Math.max(1, Math.floor(seconds * sr));
     const buffer = this.audioCtx.createBuffer(1, frames, sr);
     const data = buffer.getChannelData(0);
 
-    // Smoothed random source: closer to pink-ish air than harsh white noise.
-    let a = 0;
-    let b = 0;
-    let c = 0;
-    let d = 0;
-
+    let a = 0, b = 0, c = 0;
     for (let i = 0; i < frames; i++) {
       const white = Math.random() * 2 - 1;
-
       a = a * 0.998 + white * 0.002;
-      b = b * 0.995 + a * 0.005;
-      c = c * 0.990 + b * 0.010;
-      d = d * 0.985 + c * 0.015;
-
-      data[i] = clamp(d * 1.6, -1, 1);
-    }
-
-    // Soft edge shaping helps avoid obvious loop seams.
-    const fade = Math.min(Math.floor(sr * 0.25), Math.floor(frames / 4));
-    for (let i = 0; i < fade; i++) {
-      const t = i / fade;
-      const wIn = Math.sin((t * Math.PI) / 2);
-      const wOut = Math.cos((t * Math.PI) / 2);
-
-      const start = data[i];
-      const end = data[frames - fade + i];
-      const mixed = start * wOut + end * wIn;
-
-      data[i] = mixed;
-      data[frames - fade + i] = mixed;
+      b = b * 0.992 + a * 0.008;
+      c = c * 0.984 + b * 0.016;
+      data[i] = clamp(c * 1.8, -1, 1);
     }
 
     return buffer;
   }
 
-  _makeLoopingNoiseSource({ duration = 6.0, playbackRate = 1.0 }) {
-    const source = this.audioCtx.createBufferSource();
-    source.buffer = this._createSmoothNoiseBuffer(duration);
-    source.loop = true;
-    source.playbackRate.value = playbackRate;
-    return source;
+  _makeNoiseSource(seconds = 8, rate = 1) {
+    const src = this.audioCtx.createBufferSource();
+    src.buffer = this._createNoiseBuffer(seconds);
+    src.loop = true;
+    src.playbackRate.value = rate;
+    return src;
   }
 
   _safeStart(node) {
-    try {
-      node.start();
-    } catch (_) {
-      // ignore double-start or state timing issues
-    }
+    try { node.start(); } catch (_) {}
   }
 
   _buildGraph() {
@@ -391,321 +336,245 @@ export default class WindExpert {
     this.outputGain = ctx.createGain();
     this.outputGain.gain.value = 1.0;
 
-    this.stereoPanner = ctx.createStereoPanner();
-    this.stereoPanner.pan.value = 0;
+    this.panner = ctx.createStereoPanner();
+    this.panner.pan.value = 0;
 
-    // Main bed: the soft, continuous air layer.
-    this.bedA = this._makeLoopingNoiseSource({
-      duration: 7.5,
-      playbackRate: randomRange(0.9, 1.04),
-    });
+    this.mix = ctx.createGain();
+    this.mix.gain.value = 1;
 
-    this.bedB = this._makeLoopingNoiseSource({
-      duration: 8.25,
-      playbackRate: randomRange(0.84, 0.98),
-    });
+    // Bed layer: constant wind body, audible on phones.
+    this.bed = this._makeNoiseSource(9.5, randomRange(0.92, 1.05));
+    this.bedHP = ctx.createBiquadFilter();
+    this.bedHP.type = 'highpass';
+    this.bedHP.frequency.value = 28;
+    this.bedHP.Q.value = 0.72;
 
-    this.bedAHP = ctx.createBiquadFilter();
-    this.bedAHP.type = 'highpass';
-    this.bedAHP.frequency.value = 24;
-    this.bedAHP.Q.value = 0.7;
+    this.bedLP = ctx.createBiquadFilter();
+    this.bedLP.type = 'lowpass';
+    this.bedLP.frequency.value = 5200;
+    this.bedLP.Q.value = 0.72;
 
-    this.bedALP = ctx.createBiquadFilter();
-    this.bedALP.type = 'lowpass';
-    this.bedALP.frequency.value = 5200;
-    this.bedALP.Q.value = 0.7;
+    this.bedGain = ctx.createGain();
+    this.bedGain.gain.value = 0.12;
 
-    this.bedBHP = ctx.createBiquadFilter();
-    this.bedBHP.type = 'highpass';
-    this.bedBHP.frequency.value = 20;
-    this.bedBHP.Q.value = 0.7;
+    // Air layer: brighter hiss, makes it clearly present.
+    this.air = this._makeNoiseSource(7.25, randomRange(0.84, 1.02));
+    this.airHP = ctx.createBiquadFilter();
+    this.airHP.type = 'highpass';
+    this.airHP.frequency.value = 900;
+    this.airHP.Q.value = 0.8;
 
-    this.bedBLP = ctx.createBiquadFilter();
-    this.bedBLP.type = 'lowpass';
-    this.bedBLP.frequency.value = 4400;
-    this.bedBLP.Q.value = 0.68;
+    this.airLP = ctx.createBiquadFilter();
+    this.airLP.type = 'lowpass';
+    this.airLP.frequency.value = 12000;
+    this.airLP.Q.value = 0.66;
 
-    this.bedAGain = ctx.createGain();
-    this.bedAGain.gain.value = 0.08;
+    this.airGain = ctx.createGain();
+    this.airGain.gain.value = 0.045;
 
-    this.bedBGain = ctx.createGain();
-    this.bedBGain.gain.value = 0.06;
-
-    // Fine air shimmer — very subtle, to avoid dead-flat sound.
-    this.mist = this._makeLoopingNoiseSource({
-      duration: 5.25,
-      playbackRate: randomRange(0.8, 1.0),
-    });
-
-    this.mistHP = ctx.createBiquadFilter();
-    this.mistHP.type = 'highpass';
-    this.mistHP.frequency.value = 280;
-    this.mistHP.Q.value = 0.8;
-
-    this.mistLP = ctx.createBiquadFilter();
-    this.mistLP.type = 'lowpass';
-    this.mistLP.frequency.value = 11000;
-    this.mistLP.Q.value = 0.65;
-
-    this.mistGain = ctx.createGain();
-    this.mistGain.gain.value = 0.018;
-
-    // Gentle swells instead of harsh gusts.
-    this.swell = this._makeLoopingNoiseSource({
-      duration: 4.75,
-      playbackRate: randomRange(0.78, 0.96),
-    });
-
+    // Swell layer: slow gust waves, soft but audible.
+    this.swellSrc = this._makeNoiseSource(5.5, randomRange(0.78, 0.96));
     this.swellHP = ctx.createBiquadFilter();
     this.swellHP.type = 'highpass';
-    this.swellHP.frequency.value = 90;
+    this.swellHP.frequency.value = 180;
     this.swellHP.Q.value = 0.82;
 
     this.swellBP = ctx.createBiquadFilter();
     this.swellBP.type = 'bandpass';
-    this.swellBP.frequency.value = 640;
-    this.swellBP.Q.value = 0.9;
+    this.swellBP.frequency.value = 520;
+    this.swellBP.Q.value = 0.95;
 
     this.swellLP = ctx.createBiquadFilter();
     this.swellLP.type = 'lowpass';
-    this.swellLP.frequency.value = 2800;
-    this.swellLP.Q.value = 0.7;
+    this.swellLP.frequency.value = 3200;
+    this.swellLP.Q.value = 0.75;
 
     this.swellGain = ctx.createGain();
-    this.swellGain.gain.value = 0.008;
+    this.swellGain.gain.value = 0.02;
 
-    // Very slow motion.
+    // Drift motion.
     this.panLfo = ctx.createOscillator();
     this.panLfo.type = 'sine';
-    this.panLfo.frequency.value = randomRange(0.012, 0.028);
+    this.panLfo.frequency.value = 0.035;
 
-    this.panLfoDepth = ctx.createGain();
-    this.panLfoDepth.gain.value = 0.008;
+    this.panDepth = ctx.createGain();
+    this.panDepth.gain.value = 0.08;
 
     this.cutoffLfo = ctx.createOscillator();
     this.cutoffLfo.type = 'sine';
-    this.cutoffLfo.frequency.value = randomRange(0.01, 0.022);
+    this.cutoffLfo.frequency.value = 0.018;
 
     this.cutoffDepth = ctx.createGain();
-    this.cutoffDepth.gain.value = 220;
-
-    this.swellMotionLfo = ctx.createOscillator();
-    this.swellMotionLfo.type = 'sine';
-    this.swellMotionLfo.frequency.value = randomRange(0.06, 0.11);
-
-    this.swellMotionDepth = ctx.createGain();
-    this.swellMotionDepth.gain.value = 0.0;
+    this.cutoffDepth.gain.value = 120;
 
     // Wiring
-    this.bedA.connect(this.bedAHP);
-    this.bedAHP.connect(this.bedALP);
-    this.bedALP.connect(this.bedAGain);
+    this.bed.connect(this.bedHP);
+    this.bedHP.connect(this.bedLP);
+    this.bedLP.connect(this.bedGain);
 
-    this.bedB.connect(this.bedBHP);
-    this.bedBHP.connect(this.bedBLP);
-    this.bedBLP.connect(this.bedBGain);
+    this.air.connect(this.airHP);
+    this.airHP.connect(this.airLP);
+    this.airLP.connect(this.airGain);
 
-    this.mist.connect(this.mistHP);
-    this.mistHP.connect(this.mistLP);
-    this.mistLP.connect(this.mistGain);
-
-    this.swell.connect(this.swellHP);
+    this.swellSrc.connect(this.swellHP);
     this.swellHP.connect(this.swellBP);
     this.swellBP.connect(this.swellLP);
     this.swellLP.connect(this.swellGain);
 
-    this.bedAGain.connect(this.stereoPanner);
-    this.bedBGain.connect(this.stereoPanner);
-    this.mistGain.connect(this.stereoPanner);
-    this.swellGain.connect(this.stereoPanner);
+    this.bedGain.connect(this.mix);
+    this.airGain.connect(this.mix);
+    this.swellGain.connect(this.mix);
 
-    this.stereoPanner.connect(this.outputGain);
+    this.mix.connect(this.panner);
+    this.panner.connect(this.outputGain);
     this.outputGain.connect(this.masterBus);
 
-    // LFOs
-    this.panLfo.connect(this.panLfoDepth);
-    this.panLfoDepth.connect(this.stereoPanner.pan);
+    this.panLfo.connect(this.panDepth);
+    this.panDepth.connect(this.panner.pan);
 
     this.cutoffLfo.connect(this.cutoffDepth);
-    this.cutoffDepth.connect(this.bedALP.frequency);
-    this.cutoffDepth.connect(this.bedBLP.frequency);
-    this.cutoffDepth.connect(this.mistLP.frequency);
+    this.cutoffDepth.connect(this.bedLP.frequency);
+    this.cutoffDepth.connect(this.airLP.frequency);
 
-    this.swellMotionLfo.connect(this.swellMotionDepth);
-    this.swellMotionDepth.connect(this.swellGain.gain);
-
-    this._safeStart(this.bedA);
-    this._safeStart(this.bedB);
-    this._safeStart(this.mist);
-    this._safeStart(this.swell);
+    this._safeStart(this.bed);
+    this._safeStart(this.air);
+    this._safeStart(this.swellSrc);
     this._safeStart(this.panLfo);
     this._safeStart(this.cutoffLfo);
-    this._safeStart(this.swellMotionLfo);
   }
 
-  _computeWindEnergy() {
-    const enclosureFactor = pickEnclosureFactor(this.world.enclosure);
-    const pressureFactor = clamp(1.08 + (0.5 - this.world.atmosphericPressure) * 0.65, 0.72, 1.28);
+  _computeEnergy() {
+    const eFactor = enclosureFactor(this.world.enclosure);
+    const pFactor = clamp(1.12 + (0.5 - this.world.atmosphericPressure) * 0.65, 0.7, 1.35);
 
     const base =
-      (this.state.intensity * 0.62) +
-      (this.state.texture * 0.18) +
-      (this.state.gust * 0.08);
+      this.state.intensity * 0.7 +
+      this.state.swell * 0.18 +
+      this.state.texture * 0.12;
 
-    return clamp01(base * enclosureFactor * pressureFactor);
-  }
-
-  _computeSwellEnergy() {
-    const enclosureFactor = pickEnclosureFactor(this.world.enclosure);
-    const pressureFactor = clamp(1.05 + (0.5 - this.world.atmosphericPressure) * 0.85, 0.68, 1.35);
-
-    const base =
-      (this.state.gust * 0.55) +
-      (this.state.texture * 0.10) +
-      (this.state.intensity * 0.12);
-
-    return clamp01(base * enclosureFactor * pressureFactor);
+    return clamp01(base * eFactor * pFactor);
   }
 
   _applyStateToAudio(immediate = false) {
     if (!this.audioCtx || this.destroyed) return;
 
     const now = this.audioCtx.currentTime;
-    const t = immediate ? 0.001 : 1.8;
+    const t = immediate ? 0.001 : 0.55;
 
-    const windEnergy = this._computeWindEnergy();
-    const swellEnergy = this._computeSwellEnergy();
-    const openness = pickEnclosureFactor(this.world.enclosure);
+    const energy = this._computeEnergy();
+    const openness = enclosureFactor(this.world.enclosure);
 
-    // Keep it soft and sleep-friendly.
-    const bedGainATarget = 0.06 + windEnergy * 0.22;
-    const bedGainBTarget = 0.05 + windEnergy * 0.18;
-    const mistGainTarget = 0.012 + this.state.texture * 0.03;
-    const swellGainTarget = 0.004 + swellEnergy * 0.028;
+    const masterTarget = 0.72 + energy * 0.28;
+    const bedTarget = 0.12 + this.state.intensity * 0.30 + energy * 0.16;
+    const airTarget = 0.05 + this.state.texture * 0.08 + energy * 0.06;
+    const swellTarget = 0.02 + this.state.swell * 0.08 + energy * 0.04;
 
-    const bedALpTarget = 2400 + windEnergy * 2600;
-    const bedBLpTarget = 2000 + windEnergy * 2200;
-    const mistLpTarget = 5200 + this.state.texture * 2200;
-    const swellBpTarget = 320 + this.state.texture * 540;
-    const swellLpTarget = 1800 + windEnergy * 1600;
+    const bedLP = 4200 + this.state.texture * 2600 + energy * 1800;
+    const airLP = 10500 + this.state.texture * 1500;
+    const swellLP = 2200 + this.state.texture * 1000 + energy * 500;
 
-    const bedHpTarget = 20 + (1 - openness) * 12;
-    const mistHpTarget = 220 + this.state.texture * 220;
-    const swellHpTarget = 70 + this.state.texture * 50;
+    const bedHP = 24 + (1 - openness) * 18;
+    const airHP = 780 + this.state.texture * 320;
+    const swellHP = 120 + this.state.texture * 120;
+    const swellBP = 360 + this.state.texture * 420;
 
-    const panDepthTarget = 0.02 + this.state.width * 0.12;
-    const pannerBias = (this.state.width - 0.5) * 0.16 * openness;
+    const panDepth = 0.04 + this.state.width * 0.18;
+    const cutoffDepth = 90 + this.state.texture * 160;
+    const swellMotion = 0.02 + this.state.swell * 0.04;
 
-    const cutoffDepthTarget = 70 + this.state.texture * 180;
-    const swellMotionDepthTarget = 0.0 + this.state.gust * 0.018;
-
-    const outputTarget = 0.58 + windEnergy * 0.10;
-
-    const smooth = (param, value) => {
+    const set = (param, value) => {
       if (!param) return;
       param.cancelScheduledValues(now);
       param.setTargetAtTime(value, now, t);
     };
 
-    smooth(this.outputGain.gain, outputTarget);
-    smooth(this.bedAGain.gain, bedGainATarget);
-    smooth(this.bedBGain.gain, bedGainBTarget);
-    smooth(this.mistGain.gain, mistGainTarget);
-    smooth(this.swellGain.gain, swellGainTarget);
+    set(this.outputGain.gain, masterTarget);
+    set(this.bedGain.gain, bedTarget);
+    set(this.airGain.gain, airTarget);
+    set(this.swellGain.gain, swellTarget);
 
-    smooth(this.bedAHP.frequency, bedHpTarget);
-    smooth(this.bedBHP.frequency, bedHpTarget);
-    smooth(this.bedALP.frequency, bedALpTarget);
-    smooth(this.bedBLP.frequency, bedBLpTarget);
-    smooth(this.mistHP.frequency, mistHpTarget);
-    smooth(this.mistLP.frequency, mistLpTarget);
-    smooth(this.swellHP.frequency, swellHpTarget);
-    smooth(this.swellBP.frequency, swellBpTarget);
-    smooth(this.swellLP.frequency, swellLpTarget);
+    set(this.bedLP.frequency, bedLP);
+    set(this.airLP.frequency, airLP);
+    set(this.swellLP.frequency, swellLP);
 
-    smooth(this.panLfo.frequency, 0.012 + this.state.intensity * 0.022);
-    smooth(this.panLfoDepth.gain, panDepthTarget);
-    smooth(this.stereoPanner.pan, pannerBias);
+    set(this.bedHP.frequency, bedHP);
+    set(this.airHP.frequency, airHP);
+    set(this.swellHP.frequency, swellHP);
+    set(this.swellBP.frequency, swellBP);
 
-    smooth(this.cutoffLfo.frequency, 0.01 + this.state.texture * 0.012);
-    smooth(this.cutoffDepth.gain, cutoffDepthTarget);
+    set(this.panLfo.frequency, 0.02 + this.state.width * 0.03);
+    set(this.panDepth.gain, panDepth);
+    set(this.panner.pan, (this.state.width - 0.5) * 0.18 * openness);
 
-    smooth(this.swellMotionLfo.frequency, 0.05 + this.state.gust * 0.06);
-    smooth(this.swellMotionDepth.gain, swellMotionDepthTarget);
+    set(this.cutoffLfo.frequency, 0.012 + this.state.texture * 0.01);
+    set(this.cutoffDepth.gain, cutoffDepth);
 
-    this._updateCardReadouts();
-    this._scheduleNextSwell();
+    this._updateReadouts();
+    this._scheduleSwell();
   }
 
-  _startSchedulers() {
-    this._clearSchedulers();
-    this._scheduleNextSwell();
+  _startScheduler() {
+    this._clearScheduler();
+    this._scheduleSwell();
   }
 
-  _clearSchedulers() {
-    if (this.gustTimer) {
-      clearTimeout(this.gustTimer);
-      this.gustTimer = null;
+  _clearScheduler() {
+    if (this.swellTimer) {
+      clearTimeout(this.swellTimer);
+      this.swellTimer = null;
     }
   }
 
-  _scheduleNextSwell() {
+  _scheduleSwell() {
     if (this.destroyed) return;
 
-    this._clearSchedulers();
+    this._clearScheduler();
 
-    const enclosureFactor = pickEnclosureFactor(this.world.enclosure);
-    const windEnergy = this._computeWindEnergy();
-    const swellEnergy = this._computeSwellEnergy();
+    const energy = this._computeEnergy();
+    const openness = enclosureFactor(this.world.enclosure);
 
-    // Long gaps. Soft swells. No breathing-pump feel.
-    const baseDelay =
-      lerp(24000, 9000, clamp01((windEnergy + swellEnergy) * 0.5)) *
-      (0.72 + (1 - enclosureFactor) * 0.45);
+    const delay =
+      clamp(
+        lerp(22000, 7000, energy) * (0.78 + (1 - openness) * 0.45) +
+        randomRange(-0.18, 0.26) * 8000,
+        6500,
+        28000
+      );
 
-    const jitter = randomRange(-0.22, 0.32) * baseDelay;
-    const delay = clamp(baseDelay + jitter, 8000, 38000);
-
-    this.gustTimer = window.setTimeout(() => {
+    this.swellTimer = window.setTimeout(() => {
       if (this.destroyed) return;
-      this._fireSoftSwell();
-      this._scheduleNextSwell();
+      this._fireSwell();
+      this._scheduleSwell();
     }, delay);
   }
 
-  _fireSoftSwell() {
+  _fireSwell() {
     if (this.destroyed || !this.audioCtx) return;
 
     const now = this.audioCtx.currentTime;
-    const swellEnergy = this._computeSwellEnergy();
-    const openness = pickEnclosureFactor(this.world.enclosure);
+    const energy = this._computeEnergy();
+    const openness = enclosureFactor(this.world.enclosure);
 
-    // Very soft, long, sleepy swell.
-    const peak = 0.003 + swellEnergy * 0.02;
-    const mid = 0.001 + swellEnergy * 0.009;
-    const tail = 0.00008 + swellEnergy * 0.0016;
-
-    const drift = (Math.random() * 2 - 1) * (0.03 + this.state.width * 0.06) * openness;
+    const peak = 0.03 + this.state.swell * 0.10 + energy * 0.04;
+    const mid = 0.016 + this.state.swell * 0.05;
+    const tail = 0.006 + this.state.swell * 0.02;
 
     this.swellGain.gain.cancelScheduledValues(now);
-    this.swellGain.gain.setValueAtTime(Math.max(this.swellGain.gain.value, 0.00008), now);
-    this.swellGain.gain.linearRampToValueAtTime(peak, now + 1.4);
-    this.swellGain.gain.linearRampToValueAtTime(mid, now + 5.0);
-    this.swellGain.gain.linearRampToValueAtTime(tail, now + 9.5);
+    this.swellGain.gain.setValueAtTime(Math.max(this.swellGain.gain.value, 0.0001), now);
+    this.swellGain.gain.linearRampToValueAtTime(peak, now + 0.18);
+    this.swellGain.gain.linearRampToValueAtTime(mid, now + 1.2);
+    this.swellGain.gain.linearRampToValueAtTime(tail, now + 4.6);
 
-    this.stereoPanner.pan.cancelScheduledValues(now);
-    this.stereoPanner.pan.setValueAtTime(this.stereoPanner.pan.value, now);
-    this.stereoPanner.pan.linearRampToValueAtTime(
-      clamp(this.stereoPanner.pan.value + drift, -0.35, 0.35),
-      now + 1.2
+    this.panner.pan.cancelScheduledValues(now);
+    this.panner.pan.setValueAtTime(this.panner.pan.value, now);
+    this.panner.pan.linearRampToValueAtTime(
+      clamp(this.panner.pan.value + (Math.random() * 2 - 1) * 0.08 * openness, -0.32, 0.32),
+      now + 0.9
     );
-    this.stereoPanner.pan.linearRampToValueAtTime(
-      this.stereoPanner.pan.value * 0.35,
-      now + 8.0
-    );
+    this.panner.pan.linearRampToValueAtTime(this.panner.pan.value * 0.25, now + 4.5);
   }
 
-  _setControlBackground(input, value) {
+  _setFill(input, value) {
     const pct = Math.round(clamp01(value) * 100);
     input.style.background = `linear-gradient(
       90deg,
@@ -716,39 +585,22 @@ export default class WindExpert {
     )`;
   }
 
-  _updateCardReadouts() {
+  _updateReadouts() {
     if (!this.readouts) return;
 
-    if (this.readouts.intensity) {
-      this.readouts.intensity.textContent = this.state.intensity.toFixed(2);
-    }
-    if (this.readouts.gust) {
-      this.readouts.gust.textContent = this.state.gust.toFixed(2);
-    }
-    if (this.readouts.texture) {
-      this.readouts.texture.textContent = this.state.texture.toFixed(2);
-    }
-    if (this.readouts.width) {
-      this.readouts.width.textContent = this.state.width.toFixed(2);
-    }
-    if (this.readouts.state) {
-      this.readouts.state.textContent = pickEnclosureLabel(this.world.enclosure);
-    }
-    if (this.readouts.pressure) {
-      this.readouts.pressure.textContent = this.world.atmosphericPressure.toFixed(2);
-    }
-    if (this.readouts.energy) {
-      const e = this._computeWindEnergy();
-      this.readouts.energy.textContent = `${Math.round(e * 100)}%`;
-    }
-    if (this.readouts.status) {
-      this.readouts.status.textContent = 'Soft continuous breeze';
-    }
+    if (this.readouts.intensity) this.readouts.intensity.textContent = this.state.intensity.toFixed(2);
+    if (this.readouts.swell) this.readouts.swell.textContent = this.state.swell.toFixed(2);
+    if (this.readouts.texture) this.readouts.texture.textContent = this.state.texture.toFixed(2);
+    if (this.readouts.width) this.readouts.width.textContent = this.state.width.toFixed(2);
+    if (this.readouts.state) this.readouts.state.textContent = enclosureLabel(this.world.enclosure);
+    if (this.readouts.pressure) this.readouts.pressure.textContent = this.world.atmosphericPressure.toFixed(2);
+    if (this.readouts.energy) this.readouts.energy.textContent = `${Math.round(this._computeEnergy() * 100)}%`;
+    if (this.readouts.status) this.readouts.status.textContent = 'Soft continuous breeze';
 
-    if (this.controls.intensity) this._setControlBackground(this.controls.intensity, this.state.intensity);
-    if (this.controls.gust) this._setControlBackground(this.controls.gust, this.state.gust);
-    if (this.controls.texture) this._setControlBackground(this.controls.texture, this.state.texture);
-    if (this.controls.width) this._setControlBackground(this.controls.width, this.state.width);
+    if (this.controls.intensity) this._setFill(this.controls.intensity, this.state.intensity);
+    if (this.controls.swell) this._setFill(this.controls.swell, this.state.swell);
+    if (this.controls.texture) this._setFill(this.controls.texture, this.state.texture);
+    if (this.controls.width) this._setFill(this.controls.width, this.state.width);
   }
 
   getUICard() {
@@ -759,7 +611,7 @@ export default class WindExpert {
             <div class="wind-kicker">Atmosphere · Wind</div>
             <h3 class="wind-title">Wind Expert</h3>
             <p class="wind-subtitle">
-              A gentle air engine tuned for sleep-like, natural movement with long, soft motion.
+              Smooth, natural air motion with clear audible presence and gentle evolving motion.
             </p>
           </div>
 
@@ -769,9 +621,9 @@ export default class WindExpert {
         </div>
 
         <div class="wind-chiprow">
-          <span class="wind-chip">Continuous Bed</span>
+          <span class="wind-chip">Audible Bed</span>
           <span class="wind-chip">Soft Swells</span>
-          <span class="wind-chip">Slow Drift</span>
+          <span class="wind-chip">Stereo Drift</span>
           <span class="wind-chip">World-Aware</span>
         </div>
 
@@ -793,7 +645,7 @@ export default class WindExpert {
 
           <div class="wind-metric">
             <span class="wind-metric-label">Mode</span>
-            <span class="wind-metric-value">Gentle</span>
+            <span class="wind-metric-value">Natural</span>
           </div>
         </div>
 
@@ -801,7 +653,7 @@ export default class WindExpert {
           <div class="wind-control">
             <div class="wind-control-head">
               <label class="wind-control-label" for="${this.id}-intensity">Intensity</label>
-              <span class="wind-control-value" data-value="intensity">0.38</span>
+              <span class="wind-control-value" data-value="intensity">0.60</span>
             </div>
             <input
               id="${this.id}-intensity"
@@ -811,31 +663,31 @@ export default class WindExpert {
               min="0"
               max="1"
               step="0.01"
-              value="0.38"
+              value="0.60"
             />
           </div>
 
           <div class="wind-control">
             <div class="wind-control-head">
-              <label class="wind-control-label" for="${this.id}-gust">Swell</label>
-              <span class="wind-control-value" data-value="gust">0.12</span>
+              <label class="wind-control-label" for="${this.id}-swell">Swell</label>
+              <span class="wind-control-value" data-value="swell">0.22</span>
             </div>
             <input
-              id="${this.id}-gust"
+              id="${this.id}-swell"
               class="wind-slider"
-              data-control="gust"
+              data-control="swell"
               type="range"
               min="0"
               max="1"
               step="0.01"
-              value="0.12"
+              value="0.22"
             />
           </div>
 
           <div class="wind-control">
             <div class="wind-control-head">
               <label class="wind-control-label" for="${this.id}-texture">Texture</label>
-              <span class="wind-control-value" data-value="texture">0.56</span>
+              <span class="wind-control-value" data-value="texture">0.48</span>
             </div>
             <input
               id="${this.id}-texture"
@@ -845,14 +697,14 @@ export default class WindExpert {
               min="0"
               max="1"
               step="0.01"
-              value="0.56"
+              value="0.48"
             />
           </div>
 
           <div class="wind-control">
             <div class="wind-control-head">
               <label class="wind-control-label" for="${this.id}-width">Width</label>
-              <span class="wind-control-value" data-value="width">0.58</span>
+              <span class="wind-control-value" data-value="width">0.62</span>
             </div>
             <input
               id="${this.id}-width"
@@ -862,34 +714,30 @@ export default class WindExpert {
               min="0"
               max="1"
               step="0.01"
-              value="0.58"
+              value="0.62"
             />
           </div>
         </div>
 
         <div class="wind-footer">
-          <div class="wind-status" data-value="status">
-            Soft continuous breeze
-          </div>
+          <div class="wind-status" data-value="status">Soft continuous breeze</div>
         </div>
       </article>
     `;
   }
 
   bindCardControls(card) {
-    if (!card) {
-      throw new Error('WindExpert.bindCardControls requires a card element.');
-    }
+    if (!card) throw new Error('WindExpert.bindCardControls requires a card element.');
 
     this.card = card;
 
     this.controls.intensity = card.querySelector('[data-control="intensity"]');
-    this.controls.gust = card.querySelector('[data-control="gust"]');
+    this.controls.swell = card.querySelector('[data-control="swell"]');
     this.controls.texture = card.querySelector('[data-control="texture"]');
     this.controls.width = card.querySelector('[data-control="width"]');
 
     this.readouts.intensity = card.querySelector('[data-value="intensity"]');
-    this.readouts.gust = card.querySelector('[data-value="gust"]');
+    this.readouts.swell = card.querySelector('[data-value="swell"]');
     this.readouts.texture = card.querySelector('[data-value="texture"]');
     this.readouts.width = card.querySelector('[data-value="width"]');
     this.readouts.state = card.querySelector('[data-value="state"]');
@@ -897,26 +745,18 @@ export default class WindExpert {
     this.readouts.energy = card.querySelector('[data-value="energy"]');
     this.readouts.status = card.querySelector('[data-value="status"]');
 
-    const onInput = (key) => (e) => {
+    const bind = (key) => (e) => {
       const value = clamp01(parseFloat(e.target.value));
       this.state[key] = value;
       this._applyStateToAudio(false);
     };
 
-    if (this.controls.intensity) {
-      this.controls.intensity.addEventListener('input', onInput('intensity'));
-    }
-    if (this.controls.gust) {
-      this.controls.gust.addEventListener('input', onInput('gust'));
-    }
-    if (this.controls.texture) {
-      this.controls.texture.addEventListener('input', onInput('texture'));
-    }
-    if (this.controls.width) {
-      this.controls.width.addEventListener('input', onInput('width'));
-    }
+    if (this.controls.intensity) this.controls.intensity.addEventListener('input', bind('intensity'));
+    if (this.controls.swell) this.controls.swell.addEventListener('input', bind('swell'));
+    if (this.controls.texture) this.controls.texture.addEventListener('input', bind('texture'));
+    if (this.controls.width) this.controls.width.addEventListener('input', bind('width'));
 
-    this._updateCardReadouts();
+    this._updateReadouts();
   }
 
   onWorldStateUpdate(worldState = {}) {
@@ -937,72 +777,53 @@ export default class WindExpert {
     if (this.destroyed) return;
     this.destroyed = true;
 
-    this._clearSchedulers();
+    this._clearScheduler();
 
     const now = this.audioCtx?.currentTime ?? 0;
 
-    const fadeOutNode = (node, release = 0.06) => {
+    const stop = (node) => {
       if (!node) return;
-
       try {
         if (node.gain?.cancelScheduledValues) {
           node.gain.cancelScheduledValues(now);
-          node.gain.setTargetAtTime(0.00001, now, release);
+          node.gain.setTargetAtTime(0.00001, now, 0.06);
         }
-      } catch (_) {
-        // ignore
-      }
+      } catch (_) {}
 
       try {
         if (typeof node.stop === 'function') {
-          node.stop(now + 0.05);
+          node.stop(now + 0.06);
         }
-      } catch (_) {
-        // ignore
-      }
+      } catch (_) {}
 
       try {
         node.disconnect?.();
-      } catch (_) {
-        // ignore
-      }
+      } catch (_) {}
     };
 
-    fadeOutNode(this.bedA);
-    fadeOutNode(this.bedB);
-    fadeOutNode(this.mist);
-    fadeOutNode(this.swell);
-    fadeOutNode(this.panLfo);
-    fadeOutNode(this.cutoffLfo);
-    fadeOutNode(this.swellMotionLfo);
+    stop(this.bed);
+    stop(this.air);
+    stop(this.swellSrc);
+    stop(this.panLfo);
+    stop(this.cutoffLfo);
 
     try {
-      this.bedAHP?.disconnect();
-      this.bedALP?.disconnect();
-      this.bedAGain?.disconnect();
-
-      this.bedBHP?.disconnect();
-      this.bedBLP?.disconnect();
-      this.bedBGain?.disconnect();
-
-      this.mistHP?.disconnect();
-      this.mistLP?.disconnect();
-      this.mistGain?.disconnect();
-
+      this.bedHP?.disconnect();
+      this.bedLP?.disconnect();
+      this.bedGain?.disconnect();
+      this.airHP?.disconnect();
+      this.airLP?.disconnect();
+      this.airGain?.disconnect();
       this.swellHP?.disconnect();
       this.swellBP?.disconnect();
       this.swellLP?.disconnect();
       this.swellGain?.disconnect();
-
-      this.stereoPanner?.disconnect();
+      this.panner?.disconnect();
       this.outputGain?.disconnect();
-
-      this.panLfoDepth?.disconnect();
+      this.panDepth?.disconnect();
       this.cutoffDepth?.disconnect();
-      this.swellMotionDepth?.disconnect();
-    } catch (_) {
-      // ignore cleanup issues
-    }
+      this.mix?.disconnect();
+    } catch (_) {}
 
     this.card = null;
     this.controls = {};
