@@ -1,303 +1,55 @@
 /**
  * app.js – Master Controller for Symbiote Studio · MoE World Model
  *
- * This file orchestrates UI interactions, manages the global audio engine,
- * routes world state to active experts, and handles dynamic expert
- * instantiation/removal. It is the only JavaScript file needed on top of
- * the pre-built index.html skeleton.
- *
- * Expert modules (e.g. RainExpert, WindExpert) are imported statically and
- * must conform to the required interface (getUICard, bindCardControls,
- * onWorldStateUpdate, destroy). The audio master bus feeds all expert audio
- * through a low-pass filter and a limiter before reaching the system output.
- *
- * Architecture:
- *  - Global AudioContext and master chain (created lazily on first user
- *    interaction to satisfy autoplay policies).
- *  - Reactive world state (enclosure, atmospheric pressure) updated from
- *    the Router Console UI and propagated to every active expert.
- *  - Bottom sheet modal for adding experts with full error handling.
- *  - Event delegation on the Expert Rack for reliable remove-button handling.
+ * Responsibilities:
+ * - Lazy-initialize the Web Audio engine on first user interaction
+ * - Maintain a single global world state
+ * - Add/remove acoustic experts dynamically
+ * - Keep the bottom sheet modal mobile-safe and reliable
+ * - Propagate state updates to every active expert
  */
 
-// ---------------------------------------------------------------------------
-// Static Imports (expert modules)
-// ---------------------------------------------------------------------------
 import RainExpert from './expert_rain.js';
 import WindExpert from './expert_wind.js';
 
 // ---------------------------------------------------------------------------
 // Audio Engine Globals
 // ---------------------------------------------------------------------------
-let audioCtx = null;             // The single shared AudioContext
-let masterBus = null;            // GainNode that sums all expert outputs
-let globalLowPassFilter = null;  // BiquadFilter – enclosure-tailored LPF
-let compressor = null;           // DynamicsCompressor acting as limiter
+let audioCtx = null;
+let masterBus = null;
+let globalLowPassFilter = null;
+let compressor = null;
 
 // ---------------------------------------------------------------------------
-// Global World State (single source of truth)
+// Global World State
 // ---------------------------------------------------------------------------
 const currentState = {
-  atmosphericPressure: 0.5, // Range 0.0 – 1.0 (matched to #pressureSlider)
-  enclosure: 'open',        // 'open' | 'umbrella' | 'indoor'
+  atmosphericPressure: 0.5,
+  enclosure: 'open',
 };
 
 // ---------------------------------------------------------------------------
-// Active Experts Map (id → expert instance)
+// Active Experts Registry
 // ---------------------------------------------------------------------------
 const activeExperts = new Map();
 
 // ---------------------------------------------------------------------------
-// DOM References (cached once)
+// DOM References
 // ---------------------------------------------------------------------------
 const enclosureSelect = document.getElementById('enclosureSelect');
 const pressureSlider = document.getElementById('pressureSlider');
-const sliderValueIndicator = document.querySelector('.slider-value-indicator');
+const pressureValue = document.getElementById('pressureValue');
 const addLayerBtn = document.getElementById('addLayerBtn');
 const layerModal = document.getElementById('layerModal');
 const expertRack = document.getElementById('expertRack');
+const sheet = layerModal?.querySelector('.sheet');
 
 // ---------------------------------------------------------------------------
-// 1. Audio Engine Initialization (The Failsafe)
+// Helpers
 // ---------------------------------------------------------------------------
-/**
- * Initialises the Web Audio API context, creates the master audio chain,
- * and resumes the context if suspended (mobile autoplay policies).
- * Safe to call multiple times – only runs once.
- */
-async function initEngine() {
-  if (audioCtx) {
-    // Already initialised – just resume if needed
-    if (audioCtx.state === 'suspended') {
-      await audioCtx.resume();
-    }
-    return;
-  }
+function uuid() {
+  if (window.crypto?.randomUUID) return crypto.randomUUID();
 
-  try {
-    // Create AudioContext (with legacy vendor prefix fallback)
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    // Autoplay policy workaround – must be resumed inside a user gesture
-    if (audioCtx.state === 'suspended') {
-      await audioCtx.resume();
-    }
-
-    // ── Master Audio Chain ──────────────────────────────────────────
-    // masterBus → globalLowPassFilter → compressor → destination
-
-    masterBus = audioCtx.createGain();
-    masterBus.gain.value = 1.0;
-
-    globalLowPassFilter = audioCtx.createBiquadFilter();
-    globalLowPassFilter.type = 'lowpass';
-    globalLowPassFilter.frequency.value = 20000;
-    globalLowPassFilter.Q.value = 0.7;
-
-    compressor = audioCtx.createDynamicsCompressor();
-    compressor.threshold.value = -1.0;
-    compressor.knee.value = 0.0;
-    compressor.ratio.value = 20.0;
-    compressor.attack.value = 0.005;
-    compressor.release.value = 0.05;
-
-    masterBus.connect(globalLowPassFilter);
-    globalLowPassFilter.connect(compressor);
-    compressor.connect(audioCtx.destination);
-
-    console.log('✅ Audio engine initialised. Master bus active.');
-  } catch (err) {
-    console.error('❌ Audio engine init failure:', err);
-    throw err;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 2. World State Propagation
-// ---------------------------------------------------------------------------
-/**
- * Merges the supplied changes into the global state and immediately
- * notifies every active expert so they can adapt their synthesis.
- */
-function updateState(changes) {
-  Object.assign(currentState, changes);
-
-  activeExperts.forEach((expert) => {
-    if (typeof expert.onWorldStateUpdate === 'function') {
-      expert.onWorldStateUpdate(currentState);
-    }
-  });
-}
-
-// ---------------------------------------------------------------------------
-// 3. Bottom Sheet Modal Logic
-// ---------------------------------------------------------------------------
-function openModal() {
-  layerModal.classList.add('active');
-}
-
-function closeModal() {
-  layerModal.classList.remove('active');
-}
-
-// ---------------------------------------------------------------------------
-// 4. UI Event Bindings (with explicit error alerts)
-// ---------------------------------------------------------------------------
-
-// 4.1 Atmospheric Pressure Slider
-pressureSlider.addEventListener('input', (e) => {
-  try {
-    const value = parseFloat(e.target.value);
-    if (sliderValueIndicator) {
-      sliderValueIndicator.textContent = value.toFixed(2);
-    }
-
-    if (!audioCtx) initEngine();
-
-    updateState({ atmosphericPressure: value });
-  } catch (err) {
-    console.error(err);
-    alert('Slider update error: ' + err.message);
-  }
-});
-
-// 4.2 Enclosure Select
-enclosureSelect.addEventListener('change', (e) => {
-  try {
-    const value = e.target.value;
-    if (!audioCtx) initEngine();
-    updateState({ enclosure: value });
-  } catch (err) {
-    console.error(err);
-    alert('Enclosure selection error: ' + err.message);
-  }
-});
-
-// 4.3 "Add Acoustic Expert" Button
-addLayerBtn.addEventListener('click', async () => {
-  try {
-    await initEngine();
-    openModal();
-  } catch (err) {
-    console.error(err);
-    alert('Failed to open expert sheet: ' + err.message);
-  }
-});
-
-// 4.4 Close modal when clicking the semi-transparent backdrop
-layerModal.addEventListener('click', (e) => {
-  try {
-    if (e.target === layerModal) {
-      closeModal();
-    }
-  } catch (err) {
-    console.error(err);
-    alert('Modal dismissal error: ' + err.message);
-  }
-});
-
-// 4.5 Expert selection buttons inside the modal (CORRECTED)
-layerModal.addEventListener('click', async (e) => {
-  try {
-    const btn = e.target.closest('.sheet-btn');
-    if (!btn) return;
-
-    // "Custom · Paste Expert Code" closes the sheet but does nothing else yet
-    if (btn.id === 'injectCodeBtn') {
-      closeModal();
-      return;
-    }
-
-    const expertType = btn.dataset.expert;
-    if (!expertType) return;
-
-    // Ensure audio engine is fully initialised before creating any expert
-    await initEngine();
-
-    // Extra safety – both audioCtx and masterBus must exist
-    if (!audioCtx || !masterBus) {
-      throw new Error('Audio engine not properly initialised. Tap "Add Expert" again.');
-    }
-
-    let expert = null;
-
-    switch (expertType) {
-      case 'rain':
-        expert = new RainExpert(audioCtx, masterBus);
-        break;
-
-      case 'wind':
-        expert = new WindExpert(audioCtx, masterBus);
-        break;
-
-      default:
-        throw new Error(`Unknown expert type: "${expertType}"`);
-    }
-
-    if (!expert || !expert.id) {
-      throw new Error(`Failed to create expert: "${expertType}"`);
-    }
-
-    // Store instance
-    const id = expert.id;
-    activeExperts.set(id, expert);
-
-    // Create card UI and append it to the rack
-    const uiCardHTML = expert.getUICard();
-    expertRack.insertAdjacentHTML('beforeend', uiCardHTML);
-
-    // Bind controls on the newly inserted card
-    const card = expertRack.lastElementChild;
-    expert.bindCardControls(card);
-
-    // Sync immediately with the current world state
-    expert.onWorldStateUpdate(currentState);
-
-    console.log(`✨ Expert Added: ${expertType} (ID: ${id})`);
-    closeModal();
-  } catch (err) {
-    console.error(err);
-    alert('Cannot add expert: ' + err.message);
-  }
-  #layerModal.active {
-  transform: translateY(0);
-}
-});
-
-// ---------------------------------------------------------------------------
-// 5. The Killer – Event Delegation for Expert Removal
-// ---------------------------------------------------------------------------
-expertRack.addEventListener('click', (e) => {
-  try {
-    const removeBtn = e.target.closest('.remove-btn');
-    if (!removeBtn) return;
-
-    const card = removeBtn.closest('[data-id]');
-    if (!card) return;
-
-    const id = card.getAttribute('data-id');
-    if (!id) return;
-
-    const expert = activeExperts.get(id);
-    if (expert) {
-      if (typeof expert.destroy === 'function') {
-        expert.destroy();
-      }
-      activeExperts.delete(id);
-    }
-
-    card.remove();
-    console.log(`🗑️ Expert ${id} removed`);
-  } catch (err) {
-    console.error(err);
-    alert('Error removing expert: ' + err.message);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Utility: Fallback UUID generator (for browsers without crypto.randomUUID)
-// ---------------------------------------------------------------------------
-function fallbackUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -305,16 +57,325 @@ function fallbackUUID() {
   });
 }
 
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function setRangeFill(input, value) {
+  const pct = Math.round(clamp01(value) * 100);
+  input.style.background = `linear-gradient(
+    90deg,
+    rgba(124,58,237,0.92) 0%,
+    rgba(37,99,235,0.92) ${pct}%,
+    rgba(255,255,255,0.10) ${pct}%,
+    rgba(255,255,255,0.10) 100%
+  )`;
+}
+
+function syncPressureUI(value) {
+  const v = clamp01(value);
+  if (pressureValue) {
+    pressureValue.textContent = v.toFixed(2);
+  }
+  if (pressureSlider) {
+    setRangeFill(pressureSlider, v);
+  }
+}
+
+function syncStateToExperts() {
+  activeExperts.forEach((expert) => {
+    if (typeof expert.onWorldStateUpdate === 'function') {
+      expert.onWorldStateUpdate(currentState);
+    }
+  });
+}
+
+function updateState(changes) {
+  Object.assign(currentState, changes);
+  syncStateToExperts();
+}
+
+// ---------------------------------------------------------------------------
+// Audio Engine Initialization
+// ---------------------------------------------------------------------------
+async function initEngine() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+    return;
+  }
+
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) {
+    throw new Error('Web Audio API is not supported on this device/browser.');
+  }
+
+  audioCtx = new AudioContextCtor();
+
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume();
+  }
+
+  masterBus = audioCtx.createGain();
+  masterBus.gain.value = 1.0;
+
+  globalLowPassFilter = audioCtx.createBiquadFilter();
+  globalLowPassFilter.type = 'lowpass';
+  globalLowPassFilter.frequency.value = 20000;
+  globalLowPassFilter.Q.value = 0.7;
+
+  compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.value = -1.0;
+  compressor.knee.value = 0.0;
+  compressor.ratio.value = 20.0;
+  compressor.attack.value = 0.005;
+  compressor.release.value = 0.05;
+
+  masterBus.connect(globalLowPassFilter);
+  globalLowPassFilter.connect(compressor);
+  compressor.connect(audioCtx.destination);
+
+  console.log('✅ Audio engine initialised.');
+}
+
+// ---------------------------------------------------------------------------
+// Modal Controls
+// ---------------------------------------------------------------------------
+function openModal() {
+  if (!layerModal) return;
+  layerModal.classList.add('open', 'active');
+  layerModal.setAttribute('aria-hidden', 'false');
+  document.documentElement.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  if (!layerModal) return;
+  layerModal.classList.remove('open', 'active');
+  layerModal.setAttribute('aria-hidden', 'true');
+  document.documentElement.style.overflow = '';
+}
+
+// Optional: prevent clicks inside sheet from bubbling to overlay close logic
+if (sheet) {
+  sheet.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Expert Factory
+// ---------------------------------------------------------------------------
+function createExpertByType(type) {
+  switch (type) {
+    case 'rain':
+      return new RainExpert(audioCtx, masterBus);
+
+    case 'wind':
+      return new WindExpert(audioCtx, masterBus);
+
+    case 'birds':
+      throw new Error('Birds expert is not wired yet.');
+
+    default:
+      throw new Error(`Unknown expert type: "${type}"`);
+  }
+}
+
+function addExpertToRack(expert) {
+  if (!expert || !expert.id) {
+    throw new Error('Expert instance is invalid.');
+  }
+
+  if (typeof expert.getUICard !== 'function') {
+    throw new Error('Expert is missing getUICard().');
+  }
+
+  if (typeof expert.bindCardControls !== 'function') {
+    throw new Error('Expert is missing bindCardControls().');
+  }
+
+  const html = expert.getUICard();
+  expertRack.insertAdjacentHTML('beforeend', html);
+
+  const card = expertRack.lastElementChild;
+  if (!card) {
+    throw new Error('Failed to mount expert card.');
+  }
+
+  expert.bindCardControls(card);
+
+  if (typeof expert.onWorldStateUpdate === 'function') {
+    expert.onWorldStateUpdate(currentState);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UI Event Bindings
+// ---------------------------------------------------------------------------
+if (pressureSlider) {
+  pressureSlider.addEventListener('input', async (e) => {
+    try {
+      const value = parseFloat(e.target.value);
+      syncPressureUI(value);
+      updateState({ atmosphericPressure: value });
+
+      if (!audioCtx) {
+        void initEngine();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Slider update error: ' + err.message);
+    }
+  });
+}
+
+if (enclosureSelect) {
+  enclosureSelect.addEventListener('change', async (e) => {
+    try {
+      const value = e.target.value;
+      updateState({ enclosure: value });
+
+      if (!audioCtx) {
+        void initEngine();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Enclosure selection error: ' + err.message);
+    }
+  });
+}
+
+if (addLayerBtn) {
+  addLayerBtn.addEventListener('click', async () => {
+    try {
+      await initEngine();
+      openModal();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to open expert sheet: ' + err.message);
+    }
+  });
+}
+
+if (layerModal) {
+  // Close when tapping backdrop
+  layerModal.addEventListener('click', (e) => {
+    try {
+      if (e.target === layerModal) {
+        closeModal();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Modal dismissal error: ' + err.message);
+    }
+  });
+
+  // Handle expert selection buttons
+  layerModal.addEventListener('click', async (e) => {
+    try {
+      const btn = e.target.closest('.sheet-btn');
+      if (!btn) return;
+
+      if (btn.id === 'injectCodeBtn') {
+        closeModal();
+        alert('Custom expert injector is not wired yet.');
+        return;
+      }
+
+      const expertType = btn.dataset.expert;
+      if (!expertType) return;
+
+      await initEngine();
+
+      if (!audioCtx || !masterBus) {
+        throw new Error('Audio engine is not ready. Try again.');
+      }
+
+      const expert = createExpertByType(expertType);
+
+      activeExperts.set(expert.id, expert);
+      addExpertToRack(expert);
+
+      console.log(`✨ Expert Added: ${expertType} (${expert.id})`);
+      closeModal();
+    } catch (err) {
+      console.error(err);
+      alert('Cannot add expert: ' + err.message);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Expert Removal via Event Delegation
+// ---------------------------------------------------------------------------
+if (expertRack) {
+  expertRack.addEventListener('click', (e) => {
+    try {
+      const removeBtn = e.target.closest('.remove-btn');
+      if (!removeBtn) return;
+
+      const card = removeBtn.closest('[data-id]');
+      if (!card) return;
+
+      const id = card.getAttribute('data-id');
+      if (!id) return;
+
+      const expert = activeExperts.get(id);
+      if (expert && typeof expert.destroy === 'function') {
+        expert.destroy();
+      }
+
+      activeExperts.delete(id);
+      card.remove();
+
+      console.log(`🗑️ Expert removed: ${id}`);
+    } catch (err) {
+      console.error(err);
+      alert('Error removing expert: ' + err.message);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard UX
+// ---------------------------------------------------------------------------
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeModal();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Final Initialisation
 // ---------------------------------------------------------------------------
-if (sliderValueIndicator && pressureSlider) {
-  sliderValueIndicator.textContent = pressureSlider.value;
-}
+syncPressureUI(pressureSlider ? parseFloat(pressureSlider.value) : 0.5);
+
 if (enclosureSelect) {
   currentState.enclosure = enclosureSelect.value;
 }
 
-// Expose internal state for debugging (can be removed in production)
 window.__symbioteState = currentState;
 window.__activeExperts = activeExperts;
+
+// Cleanup on page hide
+window.addEventListener('pagehide', () => {
+  activeExperts.forEach((expert) => {
+    try {
+      if (typeof expert.destroy === 'function') {
+        expert.destroy();
+      }
+    } catch (_) {
+      // ignore cleanup errors
+    }
+  });
+  activeExperts.clear();
+
+  if (audioCtx) {
+    try {
+      audioCtx.close();
+    } catch (_) {
+      // ignore
+    }
+  }
+});
