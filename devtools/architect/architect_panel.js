@@ -13,6 +13,9 @@ import {
     createPromptBuilder
 } from './architect_prompt_builder.js';
 
+import ArchitectRuntime
+from './architect_runtime.js';
+
 export function createArchitectPanel() {
 
     // =====================================================
