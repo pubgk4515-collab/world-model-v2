@@ -1,16 +1,16 @@
 /**
- * app.js – Master Controller for Symbiote Studio · MoE World Model
+ * app.js — Master Controller for Symbiote Studio · MoE World Model
  *
  * Responsibilities:
- * - Lazy-initialize the Web Audio engine on first user interaction
- * - Maintain a single global world state
- * - Add/remove acoustic experts dynamically
- * - Keep the bottom sheet modal mobile-safe and reliable
- * - Propagate state updates to every active expert
+ * - lazy-init Web Audio on first user gesture
+ * - maintain global world state
+ * - add/remove experts dynamically
+ * - open/close modal reliably on mobile
+ * - route state updates to all active experts
  */
 
 import RainExpert from './expert_rain.js';
-import WindExpert from './expert_wind.js';
+import WindExpert from './experts/wind/expert_wind.js';
 
 // ---------------------------------------------------------------------------
 // Audio Engine Globals
@@ -76,32 +76,14 @@ function syncPressureUI(value) {
   }
 }
 
-function syncStateToExperts() {
+function updateState(changes) {
+  Object.assign(currentState, changes);
+
   activeExperts.forEach((expert) => {
     if (typeof expert.onWorldStateUpdate === 'function') {
       expert.onWorldStateUpdate(currentState);
     }
   });
-}
-
-function updateState(changes) {
-  Object.assign(currentState, changes);
-  syncStateToExperts();
-}
-
-function fallbackUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-function getExpertId(expert) {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return expert?.id || crypto.randomUUID();
-  }
-  return expert?.id || fallbackUUID();
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +135,6 @@ async function initEngine() {
 // ---------------------------------------------------------------------------
 function openModal() {
   if (!layerModal) return;
-
   layerModal.classList.add('open', 'active');
   layerModal.setAttribute('aria-hidden', 'false');
   document.documentElement.style.overflow = 'hidden';
@@ -161,10 +142,15 @@ function openModal() {
 
 function closeModal() {
   if (!layerModal) return;
-
   layerModal.classList.remove('open', 'active');
   layerModal.setAttribute('aria-hidden', 'true');
   document.documentElement.style.overflow = '';
+}
+
+if (sheet) {
+  sheet.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -178,20 +164,15 @@ function createExpertByType(type) {
     case 'wind':
       return new WindExpert(audioCtx, masterBus);
 
-    case 'birds':
-      throw new Error('Birds expert is not wired yet.');
-
     default:
       throw new Error(`Unknown expert type: "${type}"`);
   }
 }
 
 function addExpertToRack(expert) {
-  if (!expert) {
+  if (!expert || !expert.id) {
     throw new Error('Expert instance is invalid.');
   }
-
-  expert.id = getExpertId(expert);
 
   if (typeof expert.getUICard !== 'function') {
     throw new Error('Expert is missing getUICard().');
@@ -201,8 +182,8 @@ function addExpertToRack(expert) {
     throw new Error('Expert is missing bindCardControls().');
   }
 
-  const html = expert.getUICard();
-  expertRack.insertAdjacentHTML('beforeend', html);
+  const uiCardHTML = expert.getUICard();
+  expertRack.insertAdjacentHTML('beforeend', uiCardHTML);
 
   const card = expertRack.lastElementChild;
   if (!card) {
@@ -220,7 +201,7 @@ function addExpertToRack(expert) {
 // UI Event Bindings
 // ---------------------------------------------------------------------------
 if (pressureSlider) {
-  pressureSlider.addEventListener('input', async (e) => {
+  pressureSlider.addEventListener('input', (e) => {
     try {
       const value = parseFloat(e.target.value);
       syncPressureUI(value);
@@ -237,7 +218,7 @@ if (pressureSlider) {
 }
 
 if (enclosureSelect) {
-  enclosureSelect.addEventListener('change', async (e) => {
+  enclosureSelect.addEventListener('change', (e) => {
     try {
       const value = e.target.value;
       updateState({ enclosure: value });
@@ -264,7 +245,6 @@ if (addLayerBtn) {
   });
 }
 
-// Backdrop close
 if (layerModal) {
   layerModal.addEventListener('click', (e) => {
     try {
@@ -276,11 +256,8 @@ if (layerModal) {
       alert('Modal dismissal error: ' + err.message);
     }
   });
-}
 
-// Sheet click handling (THIS is the important fix)
-if (sheet) {
-  sheet.addEventListener('click', async (e) => {
+  layerModal.addEventListener('click', async (e) => {
     try {
       const btn = e.target.closest('.sheet-btn');
       if (!btn) return;
@@ -297,15 +274,15 @@ if (sheet) {
       await initEngine();
 
       if (!audioCtx || !masterBus) {
-        throw new Error('Audio engine is not ready. Try again.');
+        throw new Error('Audio engine not properly initialised.');
       }
 
       const expert = createExpertByType(expertType);
-
       activeExperts.set(expert.id, expert);
-      addExpertToRack(expert);
 
+      addExpertToRack(expert);
       console.log(`✨ Expert Added: ${expertType} (${expert.id})`);
+
       closeModal();
     } catch (err) {
       console.error(err);
@@ -330,13 +307,14 @@ if (expertRack) {
       if (!id) return;
 
       const expert = activeExperts.get(id);
-      if (expert && typeof expert.destroy === 'function') {
-        expert.destroy();
+      if (expert) {
+        if (typeof expert.destroy === 'function') {
+          expert.destroy();
+        }
+        activeExperts.delete(id);
       }
 
-      activeExperts.delete(id);
       card.remove();
-
       console.log(`🗑️ Expert removed: ${id}`);
     } catch (err) {
       console.error(err);
