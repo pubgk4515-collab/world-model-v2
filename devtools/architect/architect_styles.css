@@ -1,73 +1,146 @@
 /* /devtools/architect/architect_styles.css */
-/* Symbiote Studio — Architect Console */
-/* Mobile-first glassmorphism debug UI */
+/* -------------------------------------------------------------------------- */
+/* Symbiote Studio — Architect Console                                        */
+/* Production Overlay Runtime Edition                                         */
+/* -------------------------------------------------------------------------- */
 
-#architect-console {
+/* ==========================================================================
+   ROOT OVERLAY LAYER
+   ========================================================================== */
+
+#architect-console-root {
+
     position: fixed;
-    inset: 0;
+
+    top: 0;
+    right: 0;
+
+    width: 100%;
+    height: 100dvh;
+
     z-index: 999999;
-    display: flex;
-    justify-content: center;
-    align-items: flex-end;
+
     pointer-events: none;
-    padding: 18px;
+
     box-sizing: border-box;
+
     font-family:
         Inter,
         system-ui,
         -apple-system,
         BlinkMacSystemFont,
         sans-serif;
+
+    contain:
+        layout
+        style
+        paint;
+
+    isolation: isolate;
 }
 
-/* ===================================================== */
-/* SHELL */
-/* ===================================================== */
+/* ==========================================================================
+   PANEL SHELL
+   ========================================================================== */
 
 .architect-shell {
 
-    width: 100%;
-    max-width: 920px;
+    position: absolute;
 
-    max-height: 92dvh;
-    overflow: hidden;
+    top: 20px;
+    right: 20px;
+
+    width:
+        min(
+            440px,
+            calc(100vw - 40px)
+        );
+
+    height:
+        calc(
+            100dvh - 40px
+        );
 
     display: flex;
     flex-direction: column;
 
-    border-radius: 34px;
+    overflow: hidden;
+
+    pointer-events: auto;
+
+    border-radius: 32px;
 
     background:
         linear-gradient(
             180deg,
-            rgba(18,18,24,.92),
-            rgba(10,10,14,.96)
+            rgba(14,16,24,.92) 0%,
+            rgba(10,12,18,.96) 100%
         );
 
     border:
         1px solid rgba(255,255,255,.08);
 
     backdrop-filter:
-        blur(40px)
+        blur(44px)
         saturate(180%);
 
     -webkit-backdrop-filter:
-        blur(40px)
+        blur(44px)
         saturate(180%);
 
     box-shadow:
-        0 40px 120px rgba(0,0,0,.45),
+        0 40px 120px rgba(0,0,0,.55),
+        0 0 0 1px rgba(255,255,255,.02),
         inset 0 1px 0 rgba(255,255,255,.06);
 
-    pointer-events: auto;
-
     animation:
-        architectIn .35s cubic-bezier(.2,.8,.2,1);
+        architectDockIn .34s
+        cubic-bezier(.22,.8,.24,1);
+
+    overflow: hidden;
 }
 
-/* ===================================================== */
-/* HEADER */
-/* ===================================================== */
+/* ==========================================================================
+   CYBER GLOW EDGE
+   ========================================================================== */
+
+.architect-shell::before {
+
+    content: '';
+
+    position: absolute;
+
+    inset: 0;
+
+    pointer-events: none;
+
+    border-radius: inherit;
+
+    padding: 1px;
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(0,255,200,.24),
+            rgba(124,58,237,.18),
+            rgba(37,99,235,.16)
+        );
+
+    -webkit-mask:
+        linear-gradient(#fff 0 0)
+        content-box,
+        linear-gradient(#fff 0 0);
+
+    -webkit-mask-composite: xor;
+
+    mask-composite: exclude;
+
+    opacity: .8;
+}
+
+/* ==========================================================================
+   HEADER
+   ========================================================================== */
 
 .architect-header {
 
@@ -82,6 +155,13 @@
 
     border-bottom:
         1px solid rgba(255,255,255,.06);
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(255,255,255,.03),
+            transparent
+        );
 }
 
 .architect-header-left {
@@ -96,76 +176,92 @@
     width: 14px;
     height: 14px;
 
+    flex-shrink: 0;
+
     border-radius: 999px;
 
     background:
         radial-gradient(
             circle at 30% 30%,
-            #7c3aed,
+            #00ffd0,
             #2563eb
         );
 
     box-shadow:
-        0 0 18px rgba(124,58,237,.8);
+        0 0 22px rgba(0,255,208,.65);
 }
 
 .architect-title {
 
-    font-size: 20px;
-    font-weight: 900;
-    letter-spacing: -.04em;
+    color: #ffffff;
 
-    color: white;
+    font-size: 24px;
+    font-weight: 900;
+
+    letter-spacing: -.05em;
+
+    line-height: 1;
 }
 
 .architect-subtitle {
 
-    margin-top: 4px;
-
-    font-size: 12px;
-    letter-spacing: .12em;
-    text-transform: uppercase;
+    margin-top: 5px;
 
     color:
-        rgba(255,255,255,.42);
+        rgba(255,255,255,.36);
+
+    font-size: 11px;
+    font-weight: 700;
+
+    letter-spacing: .18em;
+
+    text-transform: uppercase;
 }
 
 .architect-close {
 
+    width: 44px;
+    height: 44px;
+
     border: none;
     outline: none;
 
-    width: 42px;
-    height: 42px;
+    border-radius: 16px;
 
-    border-radius: 14px;
+    cursor: pointer;
+
+    color: white;
+
+    font-size: 18px;
+    font-weight: 800;
 
     background:
         rgba(255,255,255,.06);
 
-    color: white;
-
-    font-size: 16px;
-    font-weight: 700;
-
-    cursor: pointer;
-
     transition:
         transform .18s ease,
-        background .18s ease;
+        background .18s ease,
+        opacity .18s ease;
 }
 
 .architect-close:hover {
 
-    transform: scale(1.06);
+    transform:
+        scale(1.04);
 
     background:
         rgba(255,255,255,.12);
 }
 
-/* ===================================================== */
-/* STATUS */
-/* ===================================================== */
+.architect-close:active {
+
+    transform:
+        scale(.96);
+}
+
+/* ==========================================================================
+   STATUS
+   ========================================================================== */
 
 .architect-status {
 
@@ -189,51 +285,56 @@
     align-items: center;
     justify-content: center;
 
+    min-height: 34px;
+
     padding:
-        10px
+        0
         14px;
 
     border-radius: 999px;
 
     background:
-        rgba(34,197,94,.14);
+        rgba(0,255,200,.12);
 
     border:
-        1px solid rgba(34,197,94,.26);
+        1px solid rgba(0,255,200,.22);
 
     color:
-        #86efac;
+        #7fffdc;
 
     font-size: 11px;
-    font-weight: 800;
-    letter-spacing: .14em;
+    font-weight: 900;
+
+    letter-spacing: .16em;
+
     text-transform: uppercase;
 }
 
 .architect-status-text {
 
-    font-size: 13px;
-
     color:
-        rgba(255,255,255,.48);
+        rgba(255,255,255,.42);
+
+    font-size: 13px;
 }
 
-/* ===================================================== */
-/* INPUT */
-/* ===================================================== */
+/* ==========================================================================
+   INPUT
+   ========================================================================== */
 
 .architect-input-wrap {
 
     padding:
         22px
         24px
-        12px;
+        14px;
 }
 
 .architect-textarea {
 
     width: 100%;
-    min-height: 160px;
+
+    min-height: 170px;
 
     resize: vertical;
 
@@ -250,44 +351,49 @@
         rgba(255,255,255,.04);
 
     border:
-        1px solid rgba(255,255,255,.06);
+        1px solid rgba(255,255,255,.07);
 
     color: white;
 
     font-size: 15px;
-    line-height: 1.7;
+    line-height: 1.8;
 
     transition:
         border-color .18s ease,
-        background .18s ease;
+        background .18s ease,
+        box-shadow .18s ease;
 }
 
 .architect-textarea:focus {
 
     border-color:
-        rgba(124,58,237,.55);
+        rgba(0,255,208,.4);
 
     background:
-        rgba(255,255,255,.06);
+        rgba(255,255,255,.055);
+
+    box-shadow:
+        0 0 0 4px rgba(0,255,208,.08);
 }
 
 .architect-textarea::placeholder {
 
     color:
-        rgba(255,255,255,.28);
+        rgba(255,255,255,.24);
 }
 
-/* ===================================================== */
-/* ACTIONS */
-/* ===================================================== */
+/* ==========================================================================
+   ACTIONS
+   ========================================================================== */
 
 .architect-actions {
 
     display: flex;
+
     gap: 12px;
 
     padding:
-        8px
+        4px
         24px
         18px;
 }
@@ -296,97 +402,105 @@
 
     flex: 1;
 
+    min-height: 56px;
+
     border: none;
     outline: none;
 
-    min-height: 56px;
-
     border-radius: 20px;
+
+    cursor: pointer;
 
     font-size: 14px;
     font-weight: 800;
-    letter-spacing: -.01em;
 
-    cursor: pointer;
+    letter-spacing: -.02em;
 
     transition:
         transform .18s ease,
         opacity .18s ease,
-        background .18s ease;
+        filter .18s ease;
 }
 
 .architect-btn:hover {
 
-    transform: translateY(-1px);
+    transform:
+        translateY(-1px);
 }
 
 .architect-btn:active {
 
-    transform: scale(.985);
+    transform:
+        scale(.985);
 }
 
 .architect-btn:disabled {
 
     opacity: .45;
+
     cursor: not-allowed;
 }
 
 .architect-btn-primary {
 
+    color: white;
+
     background:
         linear-gradient(
             135deg,
-            #7c3aed,
+            #00ffd0,
             #2563eb
         );
 
-    color: white;
-
     box-shadow:
-        0 12px 32px rgba(37,99,235,.28);
+        0 14px 40px rgba(37,99,235,.28);
 }
 
 .architect-btn-secondary {
 
+    color: white;
+
     background:
-        rgba(255,255,255,.06);
+        rgba(255,255,255,.05);
 
     border:
         1px solid rgba(255,255,255,.08);
-
-    color: white;
 }
 
-/* ===================================================== */
-/* FLAGS */
-/* ===================================================== */
+/* ==========================================================================
+   FLAGS
+   ========================================================================== */
 
 .architect-flags {
 
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+
+    gap: 10px;
 
     padding:
         0
         24px
-        18px;
+        20px;
 }
 
 .architect-flag {
 
     display: inline-flex;
     align-items: center;
+
     gap: 10px;
 
+    min-height: 42px;
+
     padding:
-        10px
+        0
         14px;
 
     border-radius: 999px;
 
     background:
-        rgba(255,255,255,.05);
+        rgba(255,255,255,.04);
 
     border:
         1px solid rgba(255,255,255,.06);
@@ -395,43 +509,66 @@
         rgba(255,255,255,.72);
 
     font-size: 13px;
+    font-weight: 600;
 }
 
 .architect-flag input {
 
     accent-color:
-        #7c3aed;
+        #00ffd0;
 }
 
-/* ===================================================== */
-/* RESULT */
-/* ===================================================== */
+/* ==========================================================================
+   RESULT
+   ========================================================================== */
 
 .architect-result {
 
     flex: 1;
 
-    overflow: auto;
+    min-height: 0;
+
+    overflow-y: auto;
+    overflow-x: hidden;
 
     padding:
         0
         24px
         24px;
 
-    min-height: 180px;
+    scrollbar-width: thin;
+
+    scrollbar-color:
+        rgba(255,255,255,.16)
+        transparent;
 }
 
-/* ===================================================== */
-/* PLACEHOLDER */
-/* ===================================================== */
+.architect-result::-webkit-scrollbar {
+
+    width: 8px;
+}
+
+.architect-result::-webkit-scrollbar-thumb {
+
+    background:
+        rgba(255,255,255,.12);
+
+    border-radius: 999px;
+}
+
+/* ==========================================================================
+   PLACEHOLDER
+   ========================================================================== */
 
 .architect-placeholder {
+
+    min-height: 180px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    min-height: 180px;
+    text-align: center;
 
     border-radius: 24px;
 
@@ -444,57 +581,20 @@
     color:
         rgba(255,255,255,.28);
 
-    text-align: center;
-
     font-size: 14px;
 }
 
-/* ===================================================== */
-/* REPORT */
-/* ===================================================== */
-
-.architect-report {
-
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-}
-
-.architect-report-header {
-
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-
-    padding-top: 8px;
-}
-
-.architect-report-title {
-
-    font-size: 20px;
-    font-weight: 900;
-    letter-spacing: -.04em;
-
-    color: white;
-}
-
-.architect-report-subtitle {
-
-    color:
-        rgba(255,255,255,.38);
-
-    font-size: 12px;
-}
-
-/* ===================================================== */
-/* SECTION */
-/* ===================================================== */
+/* ==========================================================================
+   SECTION
+   ========================================================================== */
 
 .architect-section {
 
+    overflow: hidden;
+
     border-radius: 22px;
 
-    overflow: hidden;
+    margin-bottom: 18px;
 
     background:
         rgba(255,255,255,.03);
@@ -512,13 +612,15 @@
     border-bottom:
         1px solid rgba(255,255,255,.06);
 
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-
     color:
-        rgba(255,255,255,.52);
+        rgba(255,255,255,.5);
+
+    font-size: 11px;
+    font-weight: 900;
+
+    letter-spacing: .16em;
+
+    text-transform: uppercase;
 }
 
 .architect-pre {
@@ -529,36 +631,36 @@
 
     overflow: auto;
 
-    color:
-        rgba(255,255,255,.86);
-
-    font-size: 13px;
-    line-height: 1.7;
-
     white-space: pre-wrap;
     word-break: break-word;
+
+    color:
+        rgba(255,255,255,.84);
+
+    font-size: 13px;
+    line-height: 1.75;
 }
 
-/* ===================================================== */
-/* LOADING */
-/* ===================================================== */
+/* ==========================================================================
+   LOADING
+   ========================================================================== */
 
 .architect-loading {
+
+    min-height: 240px;
 
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
 
-    min-height: 220px;
-
     gap: 18px;
 }
 
 .architect-spinner {
 
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
 
     border-radius: 999px;
 
@@ -566,7 +668,7 @@
         3px solid rgba(255,255,255,.08);
 
     border-top-color:
-        #7c3aed;
+        #00ffd0;
 
     animation:
         architectSpin 1s linear infinite;
@@ -580,15 +682,15 @@
     font-size: 14px;
 }
 
-/* ===================================================== */
-/* ERROR */
-/* ===================================================== */
+/* ==========================================================================
+   ERROR
+   ========================================================================== */
 
 .architect-error {
 
-    border-radius: 24px;
-
     overflow: hidden;
+
+    border-radius: 24px;
 
     background:
         rgba(239,68,68,.08);
@@ -609,9 +711,11 @@
     color:
         #fca5a5;
 
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
-    letter-spacing: .12em;
+
+    letter-spacing: .16em;
+
     text-transform: uppercase;
 }
 
@@ -621,30 +725,16 @@
 
     padding: 18px;
 
-    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
 
     color:
         rgba(255,255,255,.82);
-
-    white-space: pre-wrap;
-    word-break: break-word;
 }
 
-/* ===================================================== */
-/* RESPONSE */
-/* ===================================================== */
-
-.architect-response-text {
-
-    color:
-        rgba(255,255,255,.88);
-
-    line-height: 1.8;
-
-    font-size: 14px;
-
-    margin-bottom: 18px;
-}
+/* ==========================================================================
+   CODE BLOCKS
+   ========================================================================== */
 
 .architect-code-wrap {
 
@@ -654,11 +744,11 @@
 
     margin-bottom: 22px;
 
-    border:
-        1px solid rgba(255,255,255,.06);
-
     background:
         rgba(0,0,0,.42);
+
+    border:
+        1px solid rgba(255,255,255,.06);
 }
 
 .architect-code-header {
@@ -671,11 +761,13 @@
         1px solid rgba(255,255,255,.06);
 
     color:
-        rgba(255,255,255,.58);
+        rgba(255,255,255,.54);
 
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
-    letter-spacing: .12em;
+
+    letter-spacing: .14em;
+
     text-transform: uppercase;
 }
 
@@ -687,50 +779,38 @@
 
     overflow: auto;
 
+    white-space: pre-wrap;
+    word-break: break-word;
+
     color:
         #dbeafe;
 
     font-size: 13px;
-    line-height: 1.7;
-
-    white-space: pre-wrap;
-    word-break: break-word;
+    line-height: 1.75;
 }
 
-/* ===================================================== */
-/* LOGS */
-/* ===================================================== */
-
-.architect-log-line {
-
-    color:
-        rgba(255,255,255,.58);
-
-    font-size: 12px;
-
-    margin-bottom: 10px;
-}
-
-/* ===================================================== */
-/* ANIMATIONS */
-/* ===================================================== */
+/* ==========================================================================
+   ANIMATIONS
+   ========================================================================== */
 
 @keyframes architectSpin {
 
     to {
-        transform: rotate(360deg);
+
+        transform:
+            rotate(360deg);
     }
 }
 
-@keyframes architectIn {
+@keyframes architectDockIn {
 
     from {
 
         opacity: 0;
 
         transform:
-            translateY(40px)
-            scale(.96);
+            translateX(24px)
+            scale(.98);
     }
 
     to {
@@ -738,27 +818,40 @@
         opacity: 1;
 
         transform:
-            translateY(0)
+            translateX(0)
             scale(1);
     }
 }
 
-/* ===================================================== */
-/* MOBILE */
-/* ===================================================== */
+/* ==========================================================================
+   MOBILE
+   ========================================================================== */
 
 @media (max-width: 768px) {
 
-    #architect-console {
+    #architect-console-root {
 
-        padding: 10px;
-        align-items: stretch;
+        padding: 0;
     }
 
     .architect-shell {
 
-        max-height: 100dvh;
-        border-radius: 26px;
+        top: auto;
+        right: 0;
+        bottom: 0;
+
+        width: 100%;
+        height: 100dvh;
+
+        border-radius:
+            28px
+            28px
+            0
+            0;
+
+        animation:
+            architectMobileIn .28s
+            cubic-bezier(.22,.8,.24,1);
     }
 
     .architect-header {
@@ -774,17 +867,17 @@
         padding:
             18px
             18px
-            10px;
+            12px;
     }
 
     .architect-actions {
 
+        flex-direction: column;
+
         padding:
-            6px
+            4px
             18px
             16px;
-
-        flex-direction: column;
     }
 
     .architect-flags {
@@ -800,11 +893,33 @@
         padding:
             0
             18px
-            18px;
+            calc(
+                18px +
+                env(safe-area-inset-bottom)
+            );
     }
 
     .architect-textarea {
 
         min-height: 140px;
+    }
+}
+
+@keyframes architectMobileIn {
+
+    from {
+
+        opacity: 0;
+
+        transform:
+            translateY(40px);
+    }
+
+    to {
+
+        opacity: 1;
+
+        transform:
+            translateY(0);
     }
 }
