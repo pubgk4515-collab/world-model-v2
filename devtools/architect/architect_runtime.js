@@ -10,7 +10,7 @@ from './architect_patch_engine.js';
 import ArchitectRenderer
 from './architect_renderer.js';
 
-import scanProject
+import * as Scanner
 from './architect_scanner.js';
 
 import * as PromptBuilder
@@ -173,7 +173,7 @@ export default class ArchitectRuntime {
             );
 
             const scan =
-                await scanProject();
+                await Scanner.scanProject();
 
             this.lastScan =
                 scan;
@@ -239,7 +239,7 @@ export default class ArchitectRuntime {
 
             const scan =
                 this.lastScan ||
-                await scanProject();
+                await Scanner.scanProject();
 
             this.lastScan =
                 scan;
