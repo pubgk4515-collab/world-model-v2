@@ -2,9 +2,8 @@
 // Symbiote Studio — Architect Console Panel
 // Floating detachable AI debugging console
 
-import {
-    createArchitectRuntime
-} from './architect_runtime.js';
+import ArchitectRenderer
+from './architect_renderer.js';
 
 import {
     createArchitectScanner
@@ -169,7 +168,7 @@ export function createArchitectPanel() {
         createArchitectScanner();
 
     const runtime =
-        createArchitectRuntime();
+        new ArchitectRuntime();
 
     const promptBuilder =
         createPromptBuilder();
