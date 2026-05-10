@@ -14,9 +14,8 @@ import {
     createPromptBuilder
 } from './architect_prompt_builder.js';
 
-import {
-    createArchitectRenderer
-} from './architect_renderer.js';
+import ArchitectRenderer
+from './architect_renderer.js';
 
 export function createArchitectPanel() {
 
@@ -176,7 +175,7 @@ export function createArchitectPanel() {
         createPromptBuilder();
 
     const renderer =
-        createArchitectRenderer();
+        new ArchitectRenderer(root);
 
     // =====================================================
     // DOM
