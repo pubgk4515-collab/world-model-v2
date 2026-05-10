@@ -135,9 +135,9 @@ async function initEngine() {
   globalLowPassFilter.Q.value = 0.7;
 
   compressor = audioCtx.createDynamicsCompressor();
-  compressor.threshold.value = -1.0;
+  compressor.threshold.value = -12.0;
   compressor.knee.value = 0.0;
-  compressor.ratio.value = 20.0;
+  compressor.ratio.value = 4.0;
   compressor.attack.value = 0.005;
   compressor.release.value = 0.05;
 
