@@ -12,6 +12,30 @@
 import RainExpert from './expert_rain.js';
 import WindExpert from './experts/wind/expert_wind.js';
 
+window.__runtimeErrors = [];
+window.__runtimeWarnings = [];
+
+window.addEventListener('error', (event) => {
+  try {
+    window.__runtimeErrors.push({
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      line: event.lineno || 0,
+      column: event.colno || 0,
+      stack: event.error?.stack || ''
+    });
+  } catch (_) {}
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  try {
+    window.__runtimeErrors.push({
+      message: String(event.reason?.message || event.reason || 'Unhandled rejection'),
+      stack: event.reason?.stack || ''
+    });
+  } catch (_) {}
+});
+
 // ---------------------------------------------------------------------------
 // Audio Engine Globals
 // ---------------------------------------------------------------------------
@@ -43,6 +67,9 @@ const addLayerBtn = document.getElementById('addLayerBtn');
 const layerModal = document.getElementById('layerModal');
 const expertRack = document.getElementById('expertRack');
 const sheet = layerModal?.querySelector('.sheet');
+
+const audioStateValue = document.getElementById('audioStateValue');
+const expertCountValue = document.getElementById('expertCountValue');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -76,14 +103,29 @@ function syncPressureUI(value) {
   }
 }
 
+function refreshStatusTiles() {
+  if (audioStateValue) {
+    audioStateValue.textContent = audioCtx ? audioCtx.state : 'Ready';
+  }
+
+  if (expertCountValue) {
+    expertCountValue.textContent = String(activeExperts.size);
+  }
+}
+
 function updateState(changes) {
   Object.assign(currentState, changes);
 
   activeExperts.forEach((expert) => {
     if (typeof expert.onWorldStateUpdate === 'function') {
-      expert.onWorldStateUpdate(currentState);
+      expert.onWorldStateUpdate({ ...currentState });
     }
   });
+}
+
+function setBodyScrollLocked(locked) {
+  document.documentElement.style.overflow = locked ? 'hidden' : '';
+  document.body.style.overflow = locked ? 'hidden' : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +136,7 @@ async function initEngine() {
     if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
     }
+    refreshStatusTiles();
     return;
   }
 
@@ -128,6 +171,7 @@ async function initEngine() {
   compressor.connect(audioCtx.destination);
 
   console.log('✅ Audio engine initialised.');
+  refreshStatusTiles();
 }
 
 // ---------------------------------------------------------------------------
@@ -137,19 +181,21 @@ function openModal() {
   if (!layerModal) return;
   layerModal.classList.add('open', 'active');
   layerModal.setAttribute('aria-hidden', 'false');
-  document.documentElement.style.overflow = 'hidden';
+  setBodyScrollLocked(true);
 }
 
 function closeModal() {
   if (!layerModal) return;
   layerModal.classList.remove('open', 'active');
   layerModal.setAttribute('aria-hidden', 'true');
-  document.documentElement.style.overflow = '';
+  setBodyScrollLocked(false);
 }
 
+// IMPORTANT: do NOT stop propagation on the sheet,
+// because modal button clicks need to bubble to layerModal.
 if (sheet) {
-  sheet.addEventListener('click', (e) => {
-    e.stopPropagation();
+  sheet.addEventListener('click', () => {
+    // intentionally empty
   });
 }
 
@@ -158,19 +204,27 @@ if (sheet) {
 // ---------------------------------------------------------------------------
 function createExpertByType(type) {
   switch (type) {
-    case 'rain':
-      return new RainExpert(audioCtx, masterBus);
+    case 'rain': {
+      const rain = new RainExpert(audioCtx, masterBus);
+      rain.type = 'rain';
+      rain.id = rain.id || 'rain';
+      return rain;
+    }
 
-    case 'wind':
-      return new WindExpert(audioCtx, masterBus);
+    case 'wind': {
+      const wind = new WindExpert(audioCtx, masterBus);
+      wind.type = 'wind';
+      wind.id = wind.id || 'wind';
+      return wind;
+    }
 
     default:
       throw new Error(`Unknown expert type: "${type}"`);
   }
 }
 
-function addExpertToRack(expert) {
-  if (!expert || !expert.id) {
+function addExpertToRack(expert, type) {
+  if (!expert || !type) {
     throw new Error('Expert instance is invalid.');
   }
 
@@ -182,19 +236,31 @@ function addExpertToRack(expert) {
     throw new Error('Expert is missing bindCardControls().');
   }
 
-  const uiCardHTML = expert.getUICard();
-  expertRack.insertAdjacentHTML('beforeend', uiCardHTML);
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = String(expert.getUICard()).trim();
 
-  const card = expertRack.lastElementChild;
+  const card = wrapper.firstElementChild;
   if (!card) {
     throw new Error('Failed to mount expert card.');
   }
 
+  card.dataset.id = card.dataset.id || expert.id || type;
+  card.dataset.expertType = type;
+
+  expertRack.appendChild(card);
+
   expert.bindCardControls(card);
 
   if (typeof expert.onWorldStateUpdate === 'function') {
-    expert.onWorldStateUpdate(currentState);
+    expert.onWorldStateUpdate({ ...currentState });
   }
+
+  refreshStatusTiles();
+  return card;
+}
+
+function getExpertKeyFromCard(card) {
+  return card?.dataset?.expertType || card?.dataset?.id || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +304,7 @@ if (addLayerBtn) {
     try {
       await initEngine();
       openModal();
+      refreshStatusTiles();
     } catch (err) {
       console.error(err);
       alert('Failed to open expert sheet: ' + err.message);
@@ -262,14 +329,15 @@ if (layerModal) {
       const btn = e.target.closest('.sheet-btn');
       if (!btn) return;
 
+      const type = btn.dataset.expert;
+
       if (btn.id === 'injectCodeBtn') {
         closeModal();
         alert('Custom expert injector is not wired yet.');
         return;
       }
 
-      const expertType = btn.dataset.expert;
-      if (!expertType) return;
+      if (!type) return;
 
       await initEngine();
 
@@ -277,13 +345,27 @@ if (layerModal) {
         throw new Error('Audio engine not properly initialised.');
       }
 
-      const expert = createExpertByType(expertType);
-      activeExperts.set(expert.id, expert);
+      if (activeExperts.has(type)) {
+        const existingCard = expertRack.querySelector(
+          `[data-expert-type="${type}"]`
+        );
+        existingCard?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+        closeModal();
+        return;
+      }
 
-      addExpertToRack(expert);
-      console.log(`✨ Expert Added: ${expertType} (${expert.id})`);
+      const expert = createExpertByType(type);
+      activeExperts.set(type, expert);
+
+      addExpertToRack(expert, type);
+
+      console.log(`✨ Expert Added: ${type} (${expert.id})`);
 
       closeModal();
+      refreshStatusTiles();
     } catch (err) {
       console.error(err);
       alert('Cannot add expert: ' + err.message);
@@ -303,19 +385,26 @@ if (expertRack) {
       const card = removeBtn.closest('[data-id]');
       if (!card) return;
 
-      const id = card.getAttribute('data-id');
-      if (!id) return;
+      const type = getExpertKeyFromCard(card);
+      if (!type) return;
 
-      const expert = activeExperts.get(id);
-      if (expert) {
-        if (typeof expert.destroy === 'function') {
-          expert.destroy();
-        }
-        activeExperts.delete(id);
+      const expert = activeExperts.get(type);
+
+      if (expert && typeof expert.destroy === 'function') {
+        expert.destroy();
       }
 
-      card.remove();
-      console.log(`🗑️ Expert removed: ${id}`);
+      activeExperts.delete(type);
+
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.96) translateY(12px)';
+
+      setTimeout(() => {
+        card.remove();
+        refreshStatusTiles();
+      }, 180);
+
+      console.log(`🗑️ Expert removed: ${type}`);
     } catch (err) {
       console.error(err);
       alert('Error removing expert: ' + err.message);
@@ -343,6 +432,8 @@ if (enclosureSelect) {
   currentState.enclosure = enclosureSelect.value;
 }
 
+refreshStatusTiles();
+
 window.__symbioteState = currentState;
 window.__activeExperts = activeExperts;
 
@@ -361,6 +452,7 @@ window.addEventListener('pagehide', () => {
   });
 
   activeExperts.clear();
+  refreshStatusTiles();
 
   if (audioCtx) {
     try {

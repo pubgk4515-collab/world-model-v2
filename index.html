@@ -1,704 +1,1262 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
 
-  <meta
+<meta charset="UTF-8" />
+
+<meta
     name="viewport"
     content="width=device-width, initial-scale=1, viewport-fit=cover"
-  />
-  <meta name="theme-color" content="#030303" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="format-detection" content="telephone=no, date=no, email=no, address=no" />
+/>
 
-  <title>Symbiote Studio · MoE World Model</title>
+<meta
+    name="theme-color"
+    content="#050505"
+/>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+<meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+/>
+
+<meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+/>
+
+<title>
+    Symbiote Studio · MoE World Model
+</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+<link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet"
-  />
+/>
 
-  <style>
-    :root {
-      --bg: #030303;
-      --panel: rgba(255, 255, 255, 0.05);
-      --panel-strong: rgba(255, 255, 255, 0.08);
-      --border: rgba(255, 255, 255, 0.08);
-      --text: rgba(255, 255, 255, 0.94);
-      --muted: rgba(255, 255, 255, 0.56);
-      --label: rgba(255, 255, 255, 0.72);
-      --shadow: 0 20px 60px rgba(0, 0, 0, 0.62);
-      --radius-xl: 30px;
-      --radius-lg: 22px;
-      --radius-md: 18px;
-      --violet: #7c3aed;
-      --cobalt: #2563eb;
-      --dock-space: 118px;
-      --app-max: 560px;
-    }
+<link
+    rel="stylesheet"
+    href="./devtools/architect/architect_styles.css"
+/>
 
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+<style>
 
-    html {
-      width: 100%;
-      min-height: 100%;
-      overflow-x: hidden;
-      background: var(--bg);
-      -webkit-text-size-adjust: 100%;
-      text-size-adjust: 100%;
-      color-scheme: dark;
-    }
+:root {
 
-    body {
-      width: 100%;
-      min-height: 100svh;
-      overflow: hidden;
-      background: radial-gradient(circle at top, rgba(124, 58, 237, 0.08), transparent 35%),
-                  radial-gradient(circle at bottom right, rgba(37, 99, 235, 0.08), transparent 32%),
-                  var(--bg);
-      color: var(--text);
-      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      -webkit-font-smoothing: antialiased;
-      text-rendering: optimizeLegibility;
-      overscroll-behavior: none;
-      position: relative;
-    }
+    --bg:
+        #050505;
 
-    button,
-    input,
-    select {
-      font: inherit;
-    }
+    --panel:
+        rgba(255,255,255,.05);
 
-    button,
-    select {
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    }
+    --panel-2:
+        rgba(255,255,255,.08);
 
-    /* =========================
-       BACKGROUND ORBS
-    ========================== */
-    .orb {
-      position: fixed;
-      border-radius: 999px;
-      pointer-events: none;
-      z-index: 0;
-      filter: blur(140px);
-      opacity: 0.55;
-      will-change: transform, opacity;
-    }
+    --border:
+        rgba(255,255,255,.08);
 
-    .orb-violet {
-      width: 78vw;
-      height: 78vw;
-      max-width: 720px;
-      max-height: 720px;
-      top: -18%;
-      left: -18%;
-      background: radial-gradient(circle, rgba(124, 58, 237, 0.86) 0%, rgba(124, 58, 237, 0.16) 54%, transparent 100%);
-      animation: breatheViolet 14s ease-in-out infinite;
-    }
+    --text:
+        rgba(255,255,255,.96);
 
-    .orb-cobalt {
-      width: 88vw;
-      height: 88vw;
-      max-width: 820px;
-      max-height: 820px;
-      right: -28%;
-      bottom: -24%;
-      background: radial-gradient(circle, rgba(37, 99, 235, 0.88) 0%, rgba(37, 99, 235, 0.16) 58%, transparent 100%);
-      animation: breatheCobalt 18s ease-in-out infinite;
-    }
+    --muted:
+        rgba(255,255,255,.52);
 
-    @keyframes breatheViolet {
-      0%, 100% {
-        transform: scale(1) translate3d(0, 0, 0);
-        opacity: 0.44;
-      }
-      50% {
-        transform: scale(1.08) translate3d(-2%, 2%, 0);
-        opacity: 0.68;
-      }
-    }
+    --violet:
+        #7c3aed;
 
-    @keyframes breatheCobalt {
-      0%, 100% {
-        transform: scale(1) translate3d(0, 0, 0);
-        opacity: 0.38;
-      }
-      50% {
-        transform: scale(1.12) translate3d(3%, -2%, 0);
-        opacity: 0.62;
-      }
-    }
+    --blue:
+        #2563eb;
 
-    /* =========================
-       APP SHELL
-    ========================== */
-    .app-shell {
-      position: relative;
-      z-index: 2;
-      width: 100%;
-      min-height: 100svh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      padding:
-        max(18px, env(safe-area-inset-top))
-        16px
-        calc(var(--dock-space) + env(safe-area-inset-bottom) + 16px);
-      max-width: var(--app-max);
-      margin: 0 auto;
-    }
+    --green:
+        #22c55e;
 
-    /* =========================
-       HERO
-    ========================== */
-    .hero {
-      padding: 6px 2px 22px;
-      user-select: none;
-      flex: 0 0 auto;
-    }
+    --danger:
+        #ef4444;
 
-    .hero-title {
-      font-size: clamp(2rem, 5vw, 2.7rem);
-      font-weight: 800;
-      letter-spacing: -0.06em;
-      line-height: 0.98;
-      color: rgba(255, 255, 255, 0.96);
-    }
+    --radius-xl:
+        34px;
 
-    .hero-subtitle {
-      margin-top: 10px;
-      font-size: 0.95rem;
-      font-weight: 500;
-      letter-spacing: -0.02em;
-      color: var(--muted);
-    }
+    --radius-lg:
+        26px;
 
-    /* =========================
-       GLASS
-    ========================== */
-    .glass {
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.03) 100%);
-      border: 1px solid var(--border);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      box-shadow: var(--shadow);
-    }
+    --radius-md:
+        20px;
 
-    /* =========================
-       ROUTER CONSOLE
-    ========================== */
-    #routerConsole {
-      border-radius: var(--radius-xl);
-      padding: 20px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      overflow: hidden;
-      flex: 0 0 auto;
-    }
+    --shadow:
+        0 30px 100px rgba(0,0,0,.45);
 
-    .console-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
+    --app-width:
+        620px;
+}
 
-    .console-title {
-      font-size: 1rem;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      color: rgba(255, 255, 255, 0.94);
-    }
+/* ===================================================== */
+/* RESET */
+/* ===================================================== */
 
-    .console-badge {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      font-size: 0.72rem;
-      font-weight: 700;
-      color: rgba(255, 255, 255, 0.6);
-      white-space: nowrap;
-    }
+*,
+*::before,
+*::after {
 
-    .control-group {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
 
-    .control-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
+html {
 
-    .control-label {
-      font-size: 0.8rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.58);
-    }
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
 
-    .control-value {
-      font-size: 0.84rem;
-      font-weight: 700;
-      color: rgba(255, 255, 255, 0.8);
-      min-width: 44px;
-      text-align: right;
-    }
+    background:
+        var(--bg);
 
-    /* =========================
-       SELECT
-    ========================== */
-    .select-shell {
-      position: relative;
-    }
+    color-scheme:
+        dark;
+}
 
-    #enclosureSelect {
-      width: 100%;
-      border: none;
-      outline: none;
-      border-radius: var(--radius-md);
-      padding: 16px 18px;
-      appearance: none;
-      -webkit-appearance: none;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      color: rgba(255, 255, 255, 0.94);
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      line-height: 1.2;
-    }
+body {
 
-    #enclosureSelect option {
-      background: #111;
-      color: #fff;
-    }
+    width: 100%;
+    min-height: 100dvh;
 
-    .select-chevron {
-      position: absolute;
-      right: 18px;
-      top: 50%;
-      width: 10px;
-      height: 10px;
-      transform: translateY(-70%) rotate(-45deg);
-      border-left: 2px solid rgba(255, 255, 255, 0.48);
-      border-bottom: 2px solid rgba(255, 255, 255, 0.48);
-      pointer-events: none;
-    }
+    overflow-x: hidden;
+    overflow-y: auto;
 
-    /* =========================
-       RANGE SLIDER
-    ========================== */
-    .slider-wrap {
-      position: relative;
-      width: 100%;
-    }
+    background:
 
-    input[type="range"] {
-      width: 100%;
-      height: 6px;
-      appearance: none;
-      -webkit-appearance: none;
-      border-radius: 999px;
-      background: linear-gradient(90deg, rgba(124, 58, 237, 0.92), rgba(37, 99, 235, 0.92));
-      outline: none;
-    }
+        radial-gradient(
+            circle at top left,
+            rgba(124,58,237,.12),
+            transparent 30%
+        ),
 
-    input[type="range"]::-webkit-slider-thumb {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.96);
-      border: 2px solid rgba(255, 255, 255, 0.18);
-      box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(255, 255, 255, 0.14);
-      cursor: pointer;
-    }
+        radial-gradient(
+            circle at bottom right,
+            rgba(37,99,235,.10),
+            transparent 32%
+        ),
 
-    input[type="range"]::-moz-range-thumb {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.96);
-      border: 2px solid rgba(255, 255, 255, 0.18);
-      cursor: pointer;
-    }
+        var(--bg);
 
-    input[type="range"]:focus-visible,
-    select:focus-visible,
-    button:focus-visible {
-      outline: 2px solid rgba(167, 139, 250, 0.6);
-      outline-offset: 3px;
-    }
+    color:
+        var(--text);
 
-    /* =========================
-       EXPERT RACK
-    ========================== */
-    #expertRack {
-      flex: 1 1 auto;
-      min-height: 0;
-      width: 100%;
-      padding: 18px 0 0;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      overscroll-behavior: contain;
-    }
+    font-family:
+        "Inter",
+        system-ui,
+        sans-serif;
 
-    #expertRack::-webkit-scrollbar {
-      display: none;
-    }
+    -webkit-font-smoothing:
+        antialiased;
 
-    /* =========================
-       BOTTOM DOCK
-    ========================== */
-    .bottom-dock {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 40;
-      padding:
-        14px 16px
-        calc(18px + env(safe-area-inset-bottom));
-      background:
-        linear-gradient(
-          180deg,
-          rgba(3, 3, 3, 0) 0%,
-          rgba(3, 3, 3, 0.92) 35%,
-          rgba(3, 3, 3, 0.98) 100%
+    text-rendering:
+        optimizeLegibility;
+
+    display: flex;
+    justify-content: center;
+}
+
+/* ===================================================== */
+/* ORBS */
+/* ===================================================== */
+
+.orb {
+
+    position: fixed;
+
+    border-radius: 999px;
+
+    pointer-events: none;
+
+    filter: blur(140px);
+
+    z-index: 0;
+}
+
+.orb-a {
+
+    width: 540px;
+    height: 540px;
+
+    left: -220px;
+    top: -180px;
+
+    background:
+        radial-gradient(
+            circle,
+            rgba(124,58,237,.7),
+            transparent 70%
         );
-      backdrop-filter: blur(22px);
-      -webkit-backdrop-filter: blur(22px);
+
+    animation:
+        floatA 16s ease-in-out infinite;
+}
+
+.orb-b {
+
+    width: 640px;
+    height: 640px;
+
+    right: -260px;
+    bottom: -240px;
+
+    background:
+        radial-gradient(
+            circle,
+            rgba(37,99,235,.6),
+            transparent 70%
+        );
+
+    animation:
+        floatB 20s ease-in-out infinite;
+}
+
+@keyframes floatA {
+
+    0%,100% {
+
+        transform:
+            translate3d(0,0,0)
+            scale(1);
     }
 
-    #addLayerBtn {
-      width: 100%;
-      border: none;
-      outline: none;
-      border-radius: 24px;
-      padding: 18px 22px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      color: rgba(255, 255, 255, 0.97);
-      font-size: 1rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.54);
-      transition: transform 0.18s ease, background 0.18s ease;
-      cursor: pointer;
+    50% {
+
+        transform:
+            translate3d(24px,12px,0)
+            scale(1.08);
+    }
+}
+
+@keyframes floatB {
+
+    0%,100% {
+
+        transform:
+            translate3d(0,0,0)
+            scale(1);
     }
 
-    #addLayerBtn:active {
-      transform: scale(0.985);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+    50% {
+
+        transform:
+            translate3d(-28px,-12px,0)
+            scale(1.1);
+    }
+}
+
+/* ===================================================== */
+/* APP */
+/* ===================================================== */
+
+.app-shell {
+
+    position: relative;
+    z-index: 2;
+
+    width: 100%;
+    max-width: var(--app-width);
+
+    min-height: 100dvh;
+
+    display: flex;
+    flex-direction: column;
+
+    padding:
+
+        max(18px, env(safe-area-inset-top))
+
+        16px
+
+        calc(120px + env(safe-area-inset-bottom));
+}
+
+/* ===================================================== */
+/* HERO */
+/* ===================================================== */
+
+.hero {
+
+    margin-bottom: 18px;
+}
+
+.hero-top {
+
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 16px;
+}
+
+.hero-title {
+
+    font-size:
+        clamp(2.4rem, 8vw, 4rem);
+
+    font-weight:
+        900;
+
+    letter-spacing:
+        -.08em;
+
+    line-height:
+        .92;
+}
+
+.hero-sub {
+
+    margin-top: 10px;
+
+    color:
+        var(--muted);
+
+    font-size:
+        .96rem;
+
+    line-height:
+        1.6;
+
+    max-width:
+        28ch;
+}
+
+.hero-status {
+
+    flex-shrink: 0;
+
+    padding:
+        10px 14px;
+
+    border-radius:
+        999px;
+
+    background:
+        rgba(34,197,94,.12);
+
+    border:
+        1px solid rgba(34,197,94,.18);
+
+    color:
+        #86efac;
+
+    font-size:
+        .72rem;
+
+    font-weight:
+        800;
+
+    letter-spacing:
+        .14em;
+
+    text-transform:
+        uppercase;
+}
+
+/* ===================================================== */
+/* GLASS */
+/* ===================================================== */
+
+.glass {
+
+    background:
+
+        linear-gradient(
+            180deg,
+            rgba(255,255,255,.07),
+            rgba(255,255,255,.03)
+        );
+
+    border:
+        1px solid var(--border);
+
+    backdrop-filter:
+        blur(30px);
+
+    -webkit-backdrop-filter:
+        blur(30px);
+
+    box-shadow:
+        var(--shadow);
+}
+
+/* ===================================================== */
+/* ROUTER */
+/* ===================================================== */
+
+#routerConsole {
+
+    border-radius:
+        var(--radius-xl);
+
+    padding:
+        22px;
+
+    display:
+        flex;
+
+    flex-direction:
+        column;
+
+    gap:
+        22px;
+
+    margin-bottom:
+        18px;
+}
+
+.console-header {
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 12px;
+}
+
+.console-title {
+
+    font-size:
+        1.1rem;
+
+    font-weight:
+        800;
+
+    letter-spacing:
+        -.04em;
+}
+
+.console-pill {
+
+    padding:
+        8px 12px;
+
+    border-radius:
+        999px;
+
+    background:
+        rgba(255,255,255,.06);
+
+    border:
+        1px solid rgba(255,255,255,.08);
+
+    color:
+        rgba(255,255,255,.62);
+
+    font-size:
+        .72rem;
+
+    font-weight:
+        800;
+
+    letter-spacing:
+        .12em;
+
+    text-transform:
+        uppercase;
+}
+
+.control {
+
+    display:
+        flex;
+
+    flex-direction:
+        column;
+
+    gap:
+        12px;
+}
+
+.control-row {
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        space-between;
+}
+
+.control-label {
+
+    color:
+        rgba(255,255,255,.62);
+
+    font-size:
+        .78rem;
+
+    font-weight:
+        800;
+
+    letter-spacing:
+        .12em;
+
+    text-transform:
+        uppercase;
+}
+
+.control-value {
+
+    font-size:
+        .88rem;
+
+    font-weight:
+        800;
+
+    color:
+        rgba(255,255,255,.88);
+}
+
+select {
+
+    width:
+        100%;
+
+    border:
+        none;
+
+    outline:
+        none;
+
+    border-radius:
+        var(--radius-md);
+
+    padding:
+        16px 18px;
+
+    background:
+        rgba(255,255,255,.06);
+
+    border:
+        1px solid rgba(255,255,255,.08);
+
+    color:
+        white;
+
+    font-size:
+        16px;
+
+    font-weight:
+        700;
+}
+
+option {
+
+    background:
+        #111;
+}
+
+input[type="range"] {
+
+    width:
+        100%;
+
+    height:
+        8px;
+
+    appearance:
+        none;
+
+    border-radius:
+        999px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            var(--violet),
+            var(--blue)
+        );
+}
+
+input[type="range"]::-webkit-slider-thumb {
+
+    appearance:
+        none;
+
+    width:
+        28px;
+
+    height:
+        28px;
+
+    border-radius:
+        50%;
+
+    background:
+        white;
+
+    box-shadow:
+        0 0 0 6px rgba(255,255,255,.08);
+}
+
+/* ===================================================== */
+/* RACK */
+/* ===================================================== */
+
+#expertRack {
+
+    display:
+        flex;
+
+    flex-direction:
+        column;
+
+    gap:
+        18px;
+
+    width:
+        100%;
+}
+
+/* ===================================================== */
+/* SYSTEM BAR */
+/* ===================================================== */
+
+.system-bar {
+
+    display:
+        grid;
+
+    grid-template-columns:
+        repeat(3,1fr);
+
+    gap:
+        12px;
+
+    margin-bottom:
+        18px;
+}
+
+.system-tile {
+
+    border-radius:
+        24px;
+
+    padding:
+        18px;
+
+    background:
+        rgba(255,255,255,.04);
+
+    border:
+        1px solid rgba(255,255,255,.06);
+}
+
+.system-tile-label {
+
+    color:
+        rgba(255,255,255,.46);
+
+    font-size:
+        .72rem;
+
+    font-weight:
+        800;
+
+    letter-spacing:
+        .12em;
+
+    text-transform:
+        uppercase;
+
+    margin-bottom:
+        10px;
+}
+
+.system-tile-value {
+
+    font-size:
+        1.4rem;
+
+    font-weight:
+        900;
+
+    letter-spacing:
+        -.06em;
+}
+
+/* ===================================================== */
+/* DOCK */
+/* ===================================================== */
+
+.bottom-dock {
+
+    position:
+        fixed;
+
+    left:
+        50%;
+
+    transform:
+        translateX(-50%);
+
+    bottom:
+        0;
+
+    z-index:
+        50;
+
+    width:
+        100%;
+
+    max-width:
+        var(--app-width);
+
+    padding:
+
+        14px
+
+        16px
+
+        calc(18px + env(safe-area-inset-bottom));
+
+    background:
+
+        linear-gradient(
+            180deg,
+            rgba(0,0,0,0),
+            rgba(0,0,0,.88)
+        );
+}
+
+#addLayerBtn {
+
+    width:
+        100%;
+
+    border:
+        none;
+
+    outline:
+        none;
+
+    border-radius:
+        28px;
+
+    min-height:
+        68px;
+
+    background:
+
+        linear-gradient(
+            135deg,
+            rgba(124,58,237,.92),
+            rgba(37,99,235,.92)
+        );
+
+    color:
+        white;
+
+    font-size:
+        1rem;
+
+    font-weight:
+        900;
+
+    letter-spacing:
+        -.02em;
+
+    cursor:
+        pointer;
+
+    box-shadow:
+        0 18px 40px rgba(37,99,235,.28);
+}
+
+/* ===================================================== */
+/* MODAL */
+/* ===================================================== */
+
+#layerModal {
+
+    position:
+        fixed;
+
+    inset:
+        0;
+
+    z-index:
+        100;
+
+    display:
+        flex;
+
+    align-items:
+        flex-end;
+
+    justify-content:
+        center;
+
+    background:
+        rgba(0,0,0,.52);
+
+    opacity:
+        0;
+
+    pointer-events:
+        none;
+
+    transition:
+        opacity .25s ease;
+}
+
+#layerModal.open {
+
+    opacity:
+        1;
+
+    pointer-events:
+        auto;
+}
+
+.sheet {
+
+    width:
+        100%;
+
+    max-width:
+        var(--app-width);
+
+    border-radius:
+        34px 34px 0 0;
+
+    padding:
+
+        16px
+
+        16px
+
+        calc(24px + env(safe-area-inset-bottom));
+
+    transform:
+        translateY(100%);
+
+    transition:
+        transform .4s cubic-bezier(.2,.8,.2,1);
+
+    display:
+        flex;
+
+    flex-direction:
+        column;
+
+    gap:
+        12px;
+}
+
+#layerModal.open .sheet {
+
+    transform:
+        translateY(0%);
+}
+
+.sheet-handle {
+
+    width:
+        48px;
+
+    height:
+        5px;
+
+    border-radius:
+        999px;
+
+    background:
+        rgba(255,255,255,.18);
+
+    margin:
+        4px auto 12px;
+}
+
+.sheet-title {
+
+    font-size:
+        1.1rem;
+
+    font-weight:
+        900;
+
+    letter-spacing:
+        -.04em;
+}
+
+.sheet-sub {
+
+    color:
+        rgba(255,255,255,.54);
+
+    line-height:
+        1.6;
+
+    margin-bottom:
+        8px;
+}
+
+.sheet-btn {
+
+    width:
+        100%;
+
+    border:
+        none;
+
+    outline:
+        none;
+
+    border-radius:
+        22px;
+
+    min-height:
+        66px;
+
+    padding:
+        18px;
+
+    background:
+        rgba(255,255,255,.05);
+
+    border:
+        1px solid rgba(255,255,255,.06);
+
+    color:
+        white;
+
+    text-align:
+        left;
+
+    font-size:
+        1rem;
+
+    font-weight:
+        800;
+
+    cursor:
+        pointer;
+}
+
+/* ===================================================== */
+/* MOBILE */
+/* ===================================================== */
+
+@media (max-width: 640px) {
+
+    .system-bar {
+
+        grid-template-columns:
+            1fr;
     }
 
-    /* =========================
-       BOTTOM SHEET MODAL
-    ========================== */
-    #layerModal {
-      position: fixed;
-      inset: 0;
-      z-index: 80;
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.44);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.28s ease;
+    .app-shell {
+
+        padding-left:
+            12px;
+
+        padding-right:
+            12px;
     }
 
-    #layerModal.open,
-    #layerModal.active {
-      opacity: 1;
-      pointer-events: auto;
+    .bottom-dock {
+
+        padding-left:
+            12px;
+
+        padding-right:
+            12px;
     }
+}
 
-    .sheet {
-      width: 100%;
-      max-width: var(--app-max);
-      padding: 14px 16px calc(28px + env(safe-area-inset-bottom));
-      border-radius: 30px 30px 0 0;
-      transform: translateY(100%);
-      transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+</style>
 
-    #layerModal.open .sheet,
-    #layerModal.active .sheet {
-      transform: translateY(0%);
-    }
-
-    .sheet-handle {
-      width: 46px;
-      height: 5px;
-      border-radius: 999px;
-      margin: 2px auto 14px;
-      background: rgba(255, 255, 255, 0.18);
-    }
-
-    .sheet-title {
-      font-size: 1.08rem;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      color: rgba(255, 255, 255, 0.96);
-      margin-bottom: 2px;
-    }
-
-    .sheet-subtitle {
-      font-size: 0.92rem;
-      line-height: 1.48;
-      color: rgba(255, 255, 255, 0.52);
-      margin-bottom: 8px;
-    }
-
-    .sheet-btn {
-      width: 100%;
-      border: none;
-      outline: none;
-      border-radius: 20px;
-      padding: 18px 18px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      color: rgba(255, 255, 255, 0.94);
-      text-align: left;
-      font-size: 1rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
-      cursor: pointer;
-    }
-
-    .sheet-btn:active {
-      transform: scale(0.985);
-      background: rgba(255, 255, 255, 0.09);
-    }
-
-    #injectCodeBtn {
-      color: #c4b5fd;
-      border: 1px solid rgba(167, 139, 250, 0.22);
-      background: rgba(167, 139, 250, 0.08);
-    }
-
-    #injectCodeBtn:active {
-      background: rgba(167, 139, 250, 0.14);
-    }
-
-    /* =========================
-       MOBILE POLISH
-    ========================== */
-    @media (max-width: 480px) {
-      :root {
-        --dock-space: 110px;
-      }
-
-      .app-shell {
-        padding-left: 12px;
-        padding-right: 12px;
-      }
-
-      #routerConsole {
-        padding: 18px 16px;
-        gap: 18px;
-        border-radius: 26px;
-      }
-
-      .hero {
-        padding-bottom: 18px;
-      }
-
-      .hero-title {
-        font-size: clamp(1.95rem, 8vw, 2.35rem);
-      }
-
-      .bottom-dock {
-        padding-left: 12px;
-        padding-right: 12px;
-      }
-
-      .sheet {
-        padding-left: 12px;
-        padding-right: 12px;
-      }
-
-      .orb {
-        filter: blur(96px);
-        opacity: 0.42;
-      }
-
-      .glass,
-      .sheet,
-      .bottom-dock {
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-      }
-    }
-
-    @media (min-width: 768px) {
-      body {
-        display: flex;
-        justify-content: center;
-      }
-
-      .app-shell,
-      .bottom-dock,
-      .sheet {
-        width: 100%;
-        max-width: var(--app-max);
-      }
-
-      .bottom-dock {
-        left: 50%;
-        transform: translateX(-50%);
-        right: auto;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .orb,
-      .sheet,
-      #layerModal,
-      #addLayerBtn,
-      .sheet-btn {
-        animation: none !important;
-        transition: none !important;
-      }
-    }
-
-    /* Prevent iOS input zoom weirdness */
-    @supports (-webkit-touch-callout: none) {
-      input,
-      select,
-      button {
-        font-size: 16px;
-      }
-    }
-  </style>
 </head>
 
 <body>
-  <div class="orb orb-violet"></div>
-  <div class="orb orb-cobalt"></div>
 
-  <main class="app-shell">
-    <header class="hero" aria-label="Project header">
-      <h1 class="hero-title">Symbiote Studio</h1>
-      <p class="hero-subtitle">MoE World Model</p>
+<!-- ================================================== -->
+<!-- ORBS -->
+<!-- ================================================== -->
+
+<div class="orb orb-a"></div>
+<div class="orb orb-b"></div>
+
+<!-- ================================================== -->
+<!-- APP -->
+<!-- ================================================== -->
+
+<main class="app-shell">
+
+    <!-- HERO -->
+
+    <header class="hero">
+
+        <div class="hero-top">
+
+            <div>
+
+                <h1 class="hero-title">
+                    Symbiote Studio
+                </h1>
+
+                <p class="hero-sub">
+                    Modular procedural atmosphere engine
+                    powered by MoE world modeling.
+                </p>
+
+            </div>
+
+            <div class="hero-status">
+                LIVE
+            </div>
+
+        </div>
+
     </header>
 
-    <section id="routerConsole" class="glass" aria-label="Router console">
-      <div class="console-header">
-        <div class="console-title">Router Console</div>
-        <div class="console-badge">GLOBAL STATE</div>
-      </div>
+    <!-- SYSTEM -->
 
-      <div class="control-group">
-        <div class="control-row">
-          <label class="control-label" for="enclosureSelect">Enclosure</label>
+    <section class="system-bar">
+
+        <div class="system-tile">
+
+            <div class="system-tile-label">
+                Engine
+            </div>
+
+            <div class="system-tile-value">
+                Stable
+            </div>
+
         </div>
 
-        <div class="select-shell">
-          <select id="enclosureSelect" aria-label="Select enclosure mode">
-            <option value="open">Open</option>
-            <option value="umbrella">Umbrella</option>
-            <option value="indoor">Indoor</option>
-          </select>
-          <div class="select-chevron" aria-hidden="true"></div>
-        </div>
-      </div>
+        <div class="system-tile">
 
-      <div class="control-group">
-        <div class="control-row">
-          <label class="control-label" for="pressureSlider">Atmospheric Pressure</label>
-          <div class="control-value" id="pressureValue">0.50</div>
+            <div class="system-tile-label">
+                Audio
+            </div>
+
+            <div
+                class="system-tile-value"
+                id="audioStateValue"
+            >
+                Ready
+            </div>
+
         </div>
 
-        <div class="slider-wrap">
-          <input
-            id="pressureSlider"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value="0.5"
-            aria-label="Atmospheric pressure"
-          />
+        <div class="system-tile">
+
+            <div class="system-tile-label">
+                Experts
+            </div>
+
+            <div
+                class="system-tile-value"
+                id="expertCountValue"
+            >
+                0
+            </div>
+
         </div>
-      </div>
+
     </section>
 
-    <section id="expertRack" aria-label="Active acoustic experts"></section>
-  </main>
+    <!-- ROUTER -->
 
-  <div class="bottom-dock">
-    <button id="addLayerBtn" type="button">
-      Add Acoustic Expert
+    <section
+        id="routerConsole"
+        class="glass"
+    >
+
+        <div class="console-header">
+
+            <div class="console-title">
+                Router Console
+            </div>
+
+            <div class="console-pill">
+                Global State
+            </div>
+
+        </div>
+
+        <!-- ENCLOSURE -->
+
+        <div class="control">
+
+            <div class="control-row">
+
+                <div class="control-label">
+                    Enclosure
+                </div>
+
+            </div>
+
+            <select id="enclosureSelect">
+
+                <option value="open">
+                    Open Air
+                </option>
+
+                <option value="indoor">
+                    Indoor
+                </option>
+
+                <option value="umbrella">
+                    Umbrella
+                </option>
+
+            </select>
+
+        </div>
+
+        <!-- PRESSURE -->
+
+        <div class="control">
+
+            <div class="control-row">
+
+                <div class="control-label">
+                    Atmospheric Pressure
+                </div>
+
+                <div
+                    id="pressureValue"
+                    class="control-value"
+                >
+                    0.50
+                </div>
+
+            </div>
+
+            <input
+                id="pressureSlider"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.5"
+            />
+
+        </div>
+
+    </section>
+
+    <!-- EXPERTS -->
+
+    <section
+        id="expertRack"
+        aria-label="Experts"
+    ></section>
+
+</main>
+
+<!-- ================================================== -->
+<!-- BOTTOM DOCK -->
+<!-- ================================================== -->
+
+<div class="bottom-dock">
+
+    <button
+        id="addLayerBtn"
+        type="button"
+    >
+        Add Acoustic Expert
     </button>
-  </div>
 
-  <div id="layerModal" aria-hidden="true">
-    <div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-      <div class="sheet-handle"></div>
+</div>
 
-      <div class="sheet-title" id="sheetTitle">
-        Inject Acoustic Expert
-      </div>
+<!-- ================================================== -->
+<!-- MODAL -->
+<!-- ================================================== -->
 
-      <div class="sheet-subtitle">
-        Dynamically expand the MoE world model with procedural atmosphere, ecology, and behavioral modules.
-      </div>
+<div
+    id="layerModal"
+    aria-hidden="true"
+>
 
-      <button class="sheet-btn" data-expert="rain" type="button">
-        Atmosphere · Rain
-      </button>
+    <div
+        class="sheet glass"
+        role="dialog"
+    >
 
-      <button class="sheet-btn" data-expert="wind" type="button">
-        Atmosphere · Wind
-      </button>
+        <div class="sheet-handle"></div>
 
-      <button class="sheet-btn" data-expert="birds" type="button">
-        Ecology · Birds
-      </button>
+        <div class="sheet-title">
+            Inject Acoustic Expert
+        </div>
 
-      <button class="sheet-btn" id="injectCodeBtn" type="button">
-        Custom · Paste Expert Code
-      </button>
+        <div class="sheet-sub">
+            Dynamically expand the world model
+            with procedural atmosphere modules.
+        </div>
+
+        <button
+            class="sheet-btn"
+            data-expert="wind"
+            type="button"
+        >
+            🌬️ Atmosphere · Wind
+        </button>
+
+        <button
+            class="sheet-btn"
+            data-expert="rain"
+            type="button"
+        >
+            🌧️ Atmosphere · Rain
+        </button>
+
+        <button
+            class="sheet-btn"
+            id="openArchitectBtn"
+            type="button"
+        >
+            🧠 Developer · Architect Console
+        </button>
+
     </div>
-  </div>
 
-  <script type="module" src="./app.js"></script>
+</div>
+
+<!-- ================================================== -->
+<!-- APP -->
+<!-- ================================================== -->
+
+<script type="module">
+
+import './app.js';
+
+import {
+    createArchitectPanel
+} from './devtools/architect/architect_panel.js';
+
+const modal =
+    document.getElementById(
+        'layerModal'
+    );
+
+const openArchitectBtn =
+    document.getElementById(
+        'openArchitectBtn'
+    );
+
+openArchitectBtn?.addEventListener(
+    'click',
+    () => {
+
+        modal?.classList.remove('open');
+
+        createArchitectPanel();
+    }
+);
+
+</script>
+
 </body>
 </html>

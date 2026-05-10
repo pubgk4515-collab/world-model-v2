@@ -1,0 +1,810 @@
+/* /devtools/architect/architect_styles.css */
+/* Symbiote Studio — Architect Console */
+/* Mobile-first glassmorphism debug UI */
+
+#architect-console {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    pointer-events: none;
+    padding: 18px;
+    box-sizing: border-box;
+    font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        sans-serif;
+}
+
+/* ===================================================== */
+/* SHELL */
+/* ===================================================== */
+
+.architect-shell {
+
+    width: 100%;
+    max-width: 920px;
+
+    max-height: 92dvh;
+    overflow: hidden;
+
+    display: flex;
+    flex-direction: column;
+
+    border-radius: 34px;
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(18,18,24,.92),
+            rgba(10,10,14,.96)
+        );
+
+    border:
+        1px solid rgba(255,255,255,.08);
+
+    backdrop-filter:
+        blur(40px)
+        saturate(180%);
+
+    -webkit-backdrop-filter:
+        blur(40px)
+        saturate(180%);
+
+    box-shadow:
+        0 40px 120px rgba(0,0,0,.45),
+        inset 0 1px 0 rgba(255,255,255,.06);
+
+    pointer-events: auto;
+
+    animation:
+        architectIn .35s cubic-bezier(.2,.8,.2,1);
+}
+
+/* ===================================================== */
+/* HEADER */
+/* ===================================================== */
+
+.architect-header {
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding:
+        22px
+        24px
+        18px;
+
+    border-bottom:
+        1px solid rgba(255,255,255,.06);
+}
+
+.architect-header-left {
+
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.architect-dot {
+
+    width: 14px;
+    height: 14px;
+
+    border-radius: 999px;
+
+    background:
+        radial-gradient(
+            circle at 30% 30%,
+            #7c3aed,
+            #2563eb
+        );
+
+    box-shadow:
+        0 0 18px rgba(124,58,237,.8);
+}
+
+.architect-title {
+
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: -.04em;
+
+    color: white;
+}
+
+.architect-subtitle {
+
+    margin-top: 4px;
+
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+
+    color:
+        rgba(255,255,255,.42);
+}
+
+.architect-close {
+
+    border: none;
+    outline: none;
+
+    width: 42px;
+    height: 42px;
+
+    border-radius: 14px;
+
+    background:
+        rgba(255,255,255,.06);
+
+    color: white;
+
+    font-size: 16px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition:
+        transform .18s ease,
+        background .18s ease;
+}
+
+.architect-close:hover {
+
+    transform: scale(1.06);
+
+    background:
+        rgba(255,255,255,.12);
+}
+
+/* ===================================================== */
+/* STATUS */
+/* ===================================================== */
+
+.architect-status {
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 14px;
+
+    padding:
+        16px
+        24px;
+
+    border-bottom:
+        1px solid rgba(255,255,255,.05);
+}
+
+.architect-status-pill {
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    padding:
+        10px
+        14px;
+
+    border-radius: 999px;
+
+    background:
+        rgba(34,197,94,.14);
+
+    border:
+        1px solid rgba(34,197,94,.26);
+
+    color:
+        #86efac;
+
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.architect-status-text {
+
+    font-size: 13px;
+
+    color:
+        rgba(255,255,255,.48);
+}
+
+/* ===================================================== */
+/* INPUT */
+/* ===================================================== */
+
+.architect-input-wrap {
+
+    padding:
+        22px
+        24px
+        12px;
+}
+
+.architect-textarea {
+
+    width: 100%;
+    min-height: 160px;
+
+    resize: vertical;
+
+    border: none;
+    outline: none;
+
+    border-radius: 24px;
+
+    padding: 22px;
+
+    box-sizing: border-box;
+
+    background:
+        rgba(255,255,255,.04);
+
+    border:
+        1px solid rgba(255,255,255,.06);
+
+    color: white;
+
+    font-size: 15px;
+    line-height: 1.7;
+
+    transition:
+        border-color .18s ease,
+        background .18s ease;
+}
+
+.architect-textarea:focus {
+
+    border-color:
+        rgba(124,58,237,.55);
+
+    background:
+        rgba(255,255,255,.06);
+}
+
+.architect-textarea::placeholder {
+
+    color:
+        rgba(255,255,255,.28);
+}
+
+/* ===================================================== */
+/* ACTIONS */
+/* ===================================================== */
+
+.architect-actions {
+
+    display: flex;
+    gap: 12px;
+
+    padding:
+        8px
+        24px
+        18px;
+}
+
+.architect-btn {
+
+    flex: 1;
+
+    border: none;
+    outline: none;
+
+    min-height: 56px;
+
+    border-radius: 20px;
+
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: -.01em;
+
+    cursor: pointer;
+
+    transition:
+        transform .18s ease,
+        opacity .18s ease,
+        background .18s ease;
+}
+
+.architect-btn:hover {
+
+    transform: translateY(-1px);
+}
+
+.architect-btn:active {
+
+    transform: scale(.985);
+}
+
+.architect-btn:disabled {
+
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.architect-btn-primary {
+
+    background:
+        linear-gradient(
+            135deg,
+            #7c3aed,
+            #2563eb
+        );
+
+    color: white;
+
+    box-shadow:
+        0 12px 32px rgba(37,99,235,.28);
+}
+
+.architect-btn-secondary {
+
+    background:
+        rgba(255,255,255,.06);
+
+    border:
+        1px solid rgba(255,255,255,.08);
+
+    color: white;
+}
+
+/* ===================================================== */
+/* FLAGS */
+/* ===================================================== */
+
+.architect-flags {
+
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+
+    padding:
+        0
+        24px
+        18px;
+}
+
+.architect-flag {
+
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+
+    padding:
+        10px
+        14px;
+
+    border-radius: 999px;
+
+    background:
+        rgba(255,255,255,.05);
+
+    border:
+        1px solid rgba(255,255,255,.06);
+
+    color:
+        rgba(255,255,255,.72);
+
+    font-size: 13px;
+}
+
+.architect-flag input {
+
+    accent-color:
+        #7c3aed;
+}
+
+/* ===================================================== */
+/* RESULT */
+/* ===================================================== */
+
+.architect-result {
+
+    flex: 1;
+
+    overflow: auto;
+
+    padding:
+        0
+        24px
+        24px;
+
+    min-height: 180px;
+}
+
+/* ===================================================== */
+/* PLACEHOLDER */
+/* ===================================================== */
+
+.architect-placeholder {
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 180px;
+
+    border-radius: 24px;
+
+    background:
+        rgba(255,255,255,.03);
+
+    border:
+        1px dashed rgba(255,255,255,.08);
+
+    color:
+        rgba(255,255,255,.28);
+
+    text-align: center;
+
+    font-size: 14px;
+}
+
+/* ===================================================== */
+/* REPORT */
+/* ===================================================== */
+
+.architect-report {
+
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.architect-report-header {
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding-top: 8px;
+}
+
+.architect-report-title {
+
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: -.04em;
+
+    color: white;
+}
+
+.architect-report-subtitle {
+
+    color:
+        rgba(255,255,255,.38);
+
+    font-size: 12px;
+}
+
+/* ===================================================== */
+/* SECTION */
+/* ===================================================== */
+
+.architect-section {
+
+    border-radius: 22px;
+
+    overflow: hidden;
+
+    background:
+        rgba(255,255,255,.03);
+
+    border:
+        1px solid rgba(255,255,255,.06);
+}
+
+.architect-section-title {
+
+    padding:
+        14px
+        18px;
+
+    border-bottom:
+        1px solid rgba(255,255,255,.06);
+
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+
+    color:
+        rgba(255,255,255,.52);
+}
+
+.architect-pre {
+
+    margin: 0;
+
+    padding: 18px;
+
+    overflow: auto;
+
+    color:
+        rgba(255,255,255,.86);
+
+    font-size: 13px;
+    line-height: 1.7;
+
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ===================================================== */
+/* LOADING */
+/* ===================================================== */
+
+.architect-loading {
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 220px;
+
+    gap: 18px;
+}
+
+.architect-spinner {
+
+    width: 38px;
+    height: 38px;
+
+    border-radius: 999px;
+
+    border:
+        3px solid rgba(255,255,255,.08);
+
+    border-top-color:
+        #7c3aed;
+
+    animation:
+        architectSpin 1s linear infinite;
+}
+
+.architect-loading-text {
+
+    color:
+        rgba(255,255,255,.58);
+
+    font-size: 14px;
+}
+
+/* ===================================================== */
+/* ERROR */
+/* ===================================================== */
+
+.architect-error {
+
+    border-radius: 24px;
+
+    overflow: hidden;
+
+    background:
+        rgba(239,68,68,.08);
+
+    border:
+        1px solid rgba(239,68,68,.16);
+}
+
+.architect-error-title {
+
+    padding:
+        14px
+        18px;
+
+    border-bottom:
+        1px solid rgba(239,68,68,.12);
+
+    color:
+        #fca5a5;
+
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.architect-error-body {
+
+    margin: 0;
+
+    padding: 18px;
+
+    overflow: auto;
+
+    color:
+        rgba(255,255,255,.82);
+
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ===================================================== */
+/* RESPONSE */
+/* ===================================================== */
+
+.architect-response-text {
+
+    color:
+        rgba(255,255,255,.88);
+
+    line-height: 1.8;
+
+    font-size: 14px;
+
+    margin-bottom: 18px;
+}
+
+.architect-code-wrap {
+
+    overflow: hidden;
+
+    border-radius: 24px;
+
+    margin-bottom: 22px;
+
+    border:
+        1px solid rgba(255,255,255,.06);
+
+    background:
+        rgba(0,0,0,.42);
+}
+
+.architect-code-header {
+
+    padding:
+        14px
+        18px;
+
+    border-bottom:
+        1px solid rgba(255,255,255,.06);
+
+    color:
+        rgba(255,255,255,.58);
+
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.architect-code-block {
+
+    margin: 0;
+
+    padding: 20px;
+
+    overflow: auto;
+
+    color:
+        #dbeafe;
+
+    font-size: 13px;
+    line-height: 1.7;
+
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ===================================================== */
+/* LOGS */
+/* ===================================================== */
+
+.architect-log-line {
+
+    color:
+        rgba(255,255,255,.58);
+
+    font-size: 12px;
+
+    margin-bottom: 10px;
+}
+
+/* ===================================================== */
+/* ANIMATIONS */
+/* ===================================================== */
+
+@keyframes architectSpin {
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes architectIn {
+
+    from {
+
+        opacity: 0;
+
+        transform:
+            translateY(40px)
+            scale(.96);
+    }
+
+    to {
+
+        opacity: 1;
+
+        transform:
+            translateY(0)
+            scale(1);
+    }
+}
+
+/* ===================================================== */
+/* MOBILE */
+/* ===================================================== */
+
+@media (max-width: 768px) {
+
+    #architect-console {
+
+        padding: 10px;
+        align-items: stretch;
+    }
+
+    .architect-shell {
+
+        max-height: 100dvh;
+        border-radius: 26px;
+    }
+
+    .architect-header {
+
+        padding:
+            18px
+            18px
+            14px;
+    }
+
+    .architect-input-wrap {
+
+        padding:
+            18px
+            18px
+            10px;
+    }
+
+    .architect-actions {
+
+        padding:
+            6px
+            18px
+            16px;
+
+        flex-direction: column;
+    }
+
+    .architect-flags {
+
+        padding:
+            0
+            18px
+            16px;
+    }
+
+    .architect-result {
+
+        padding:
+            0
+            18px
+            18px;
+    }
+
+    .architect-textarea {
+
+        min-height: 140px;
+    }
+}
