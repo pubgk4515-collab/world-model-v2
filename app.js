@@ -260,6 +260,10 @@ layerModal.addEventListener('click', async (e) => {
     alert('Cannot add expert: ' + err.message);
   }
 });
+#layerModal.active {
+  transform: translateY(0);
+}
+
 
 // ---------------------------------------------------------------------------
 // 5. The Killer – Event Delegation for Expert Removal
