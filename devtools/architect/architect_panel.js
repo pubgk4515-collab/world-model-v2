@@ -1,9 +1,14 @@
 // /devtools/architect/architect_panel.js
+// -----------------------------------------------------------------------------
 // Symbiote Studio — Architect Console Panel
-// Stable Runtime Edition
+// Production-Stable Runtime Edition
+// -----------------------------------------------------------------------------
 
 import ArchitectRenderer
 from './architect_renderer.js';
+
+import ArchitectRuntime
+from './architect_runtime.js';
 
 import * as ScannerModule
 from './architect_scanner.js';
@@ -11,38 +16,36 @@ from './architect_scanner.js';
 import * as PromptBuilder
 from './architect_prompt_builder.js';
 
-import ArchitectRuntime
-from './architect_runtime.js';
-
-// =========================================================
+// -----------------------------------------------------------------------------
 // MAIN
-// =========================================================
+// -----------------------------------------------------------------------------
 
 export function createArchitectPanel() {
 
-    // =====================================================
+    // -------------------------------------------------------------------------
     // SINGLETON
-    // =====================================================
+    // -------------------------------------------------------------------------
 
     if (window.__architectPanelMounted) {
+
+        console.warn(
+            '[Architect] Panel already mounted.'
+        );
+
         return window.__architectPanelAPI;
     }
 
     window.__architectPanelMounted = true;
 
-    // =====================================================
+    // -------------------------------------------------------------------------
     // ROOT
-    // =====================================================
+    // -------------------------------------------------------------------------
 
     const root =
         document.createElement('div');
 
     root.id =
-        'architect-console';
-
-    // =====================================================
-    // HTML
-    // =====================================================
+        'architect-console-root';
 
     root.innerHTML = `
         <div
@@ -72,6 +75,7 @@ export function createArchitectPanel() {
                 </div>
 
                 <button
+                    id="architectCloseBtn"
                     class="architect-close"
                     type="button"
                     aria-label="Close Architect"
@@ -187,166 +191,32 @@ Audio crackling on Android."
         </div>
     `;
 
-    // =====================================================
-    // APPEND
-    // =====================================================
-
     document.body.appendChild(root);
 
-    // =====================================================
+    // -------------------------------------------------------------------------
     // PANEL ROOT
-    // =====================================================
+    // -------------------------------------------------------------------------
 
     const panelRoot =
         root.querySelector(
             '#architect-panel'
         );
 
+    if (!panelRoot) {
+
+        throw new Error(
+            '[Architect] Panel root missing.'
+        );
+    }
+
     console.log(
         'ARCHITECT ROOT:',
         panelRoot
     );
 
-    if (!panelRoot) {
-
-        throw new Error(
-            'Architect panel root missing.'
-        );
-    }
-
-    // =====================================================
-    // MODULES
-    // =====================================================
-
-    const scanner = {
-
-    async scan(options = {}) {
-
-        try {
-
-            // DEFAULT EXPORT
-            if (
-                typeof ScannerModule.default ===
-                'function'
-            ) {
-
-                return await
-                    ScannerModule.default(
-                        options
-                    );
-            }
-
-            // createArchitectScanner()
-            if (
-                typeof
-                ScannerModule
-                .createArchitectScanner ===
-                'function'
-            ) {
-
-                const scannerFactory =
-                    ScannerModule
-                    .createArchitectScanner();
-
-                if (
-                    scannerFactory &&
-                    typeof scannerFactory.scan ===
-                    'function'
-                ) {
-
-                    return await
-                        scannerFactory.scan(
-                            options
-                        );
-                }
-            }
-
-            // scanProject()
-            if (
-                typeof
-                ScannerModule.scanProject ===
-                'function'
-            ) {
-
-                return await
-                    ScannerModule.scanProject(
-                        options
-                    );
-            }
-
-            throw new Error(
-                'No valid scanner export found.'
-            );
-
-        } catch (err) {
-
-            console.error(err);
-
-            return {
-
-                success: false,
-
-                error:
-                    err.message,
-
-                files: [],
-
-                console: [],
-
-                dom: {}
-            };
-        }
-    }
-};
-
-    const runtime =
-        new ArchitectRuntime({
-            root: panelRoot
-        });
-
-    const renderer =
-        new ArchitectRenderer(
-            panelRoot
-        );
-
-    // =====================================================
-    // PROMPT BUILDER SAFE WRAPPER
-    // =====================================================
-
-    const promptBuilder = {
-
-        build(payload = {}) {
-
-            if (
-                PromptBuilder &&
-                typeof PromptBuilder.build ===
-                    'function'
-            ) {
-
-                return PromptBuilder.build(
-                    payload
-                );
-            }
-
-            return `
-Architect Analysis Request
-
-USER ISSUE:
-${payload.userPrompt || ''}
-
-SCAN:
-${JSON.stringify(
-    payload.scan || {},
-    null,
-    2
-)}
-            `;
-        }
-    };
-
-    // =====================================================
+    // -------------------------------------------------------------------------
     // DOM
-    // =====================================================
+    // -------------------------------------------------------------------------
 
     const promptEl =
         root.querySelector(
@@ -370,7 +240,7 @@ ${JSON.stringify(
 
     const closeBtn =
         root.querySelector(
-            '.architect-close'
+            '#architectCloseBtn'
         );
 
     const includeDOM =
@@ -388,38 +258,258 @@ ${JSON.stringify(
             '#architectIncludeAudio'
         );
 
-    // =====================================================
+    // -------------------------------------------------------------------------
+    // DOM DEBUG
+    // -------------------------------------------------------------------------
+
+    console.log({
+
+        promptEl,
+        resultEl,
+        scanBtn,
+        fixBtn,
+        closeBtn,
+        includeDOM,
+        includeConsole,
+        includeAudio
+    });
+
+    // -------------------------------------------------------------------------
+    // DOM VALIDATION
+    // -------------------------------------------------------------------------
+
+    const requiredElements = {
+
+        promptEl,
+        resultEl,
+        scanBtn,
+        fixBtn,
+        closeBtn
+    };
+
+    for (
+        const [key, value]
+        of Object.entries(requiredElements)
+    ) {
+
+        if (!value) {
+
+            throw new Error(
+                `[Architect] Missing DOM element: ${key}`
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // RENDERER
+    // -------------------------------------------------------------------------
+
+    const renderer =
+        new ArchitectRenderer(
+            panelRoot
+        );
+
+    // -------------------------------------------------------------------------
+    // RUNTIME
+    // -------------------------------------------------------------------------
+
+    const runtime =
+        new ArchitectRuntime({
+
+            root:
+                panelRoot,
+
+            output:
+                resultEl,
+
+            textarea:
+                promptEl,
+
+            generateBtn:
+                fixBtn,
+
+            scanBtn:
+                scanBtn
+        });
+
+    // -------------------------------------------------------------------------
+    // SCANNER WRAPPER
+    // -------------------------------------------------------------------------
+
+    const scanner = {
+
+        async scan(options = {}) {
+
+            try {
+
+                // DEFAULT EXPORT
+                if (
+                    typeof ScannerModule.default ===
+                    'function'
+                ) {
+
+                    return await
+                        ScannerModule.default(
+                            options
+                        );
+                }
+
+                // FACTORY
+                if (
+                    typeof
+                    ScannerModule
+                    .createArchitectScanner ===
+                    'function'
+                ) {
+
+                    const instance =
+                        ScannerModule
+                        .createArchitectScanner();
+
+                    if (
+                        instance &&
+                        typeof instance.scan ===
+                        'function'
+                    ) {
+
+                        return await
+                            instance.scan(
+                                options
+                            );
+                    }
+                }
+
+                // scanProject()
+                if (
+                    typeof
+                    ScannerModule.scanProject ===
+                    'function'
+                ) {
+
+                    return await
+                        ScannerModule.scanProject(
+                            options
+                        );
+                }
+
+                throw new Error(
+                    'No compatible scanner export found.'
+                );
+
+            } catch (err) {
+
+                console.error(
+                    '[Architect Scanner Error]',
+                    err
+                );
+
+                return {
+
+                    success: false,
+
+                    error:
+                        err.message,
+
+                    files: [],
+
+                    console: [],
+
+                    dom: {}
+                };
+            }
+        }
+    };
+
+    // -------------------------------------------------------------------------
+    // PROMPT BUILDER
+    // -------------------------------------------------------------------------
+
+    const promptBuilder = {
+
+        build(payload = {}) {
+
+            try {
+
+                if (
+                    typeof
+                    PromptBuilder.build ===
+                    'function'
+                ) {
+
+                    return PromptBuilder.build(
+                        payload
+                    );
+                }
+
+                if (
+                    typeof
+                    PromptBuilder
+                    .buildArchitectPrompt ===
+                    'function'
+                ) {
+
+                    return PromptBuilder
+                        .buildArchitectPrompt(
+                            payload
+                        );
+                }
+
+            } catch (err) {
+
+                console.error(
+                    '[Prompt Builder]',
+                    err
+                );
+            }
+
+            return `
+ARCHITECT ANALYSIS REQUEST
+
+USER ISSUE:
+${payload.userPrompt || ''}
+
+SCAN DATA:
+${JSON.stringify(
+    payload.scan || {},
+    null,
+    2
+)}
+            `;
+        }
+    };
+
+    // -------------------------------------------------------------------------
     // STATE
-    // =====================================================
+    // -------------------------------------------------------------------------
 
     let latestScan = null;
 
-    // =====================================================
-    // SCAN HANDLER
-    // =====================================================
+    // -------------------------------------------------------------------------
+    // SCAN
+    // -------------------------------------------------------------------------
 
     async function handleScan() {
 
-        scanBtn.disabled = true;
-
         try {
+
+            scanBtn.disabled = true;
 
             renderer.renderLoading(
                 resultEl,
-                'Scanning project...'
+                'Scanning project runtime...'
             );
 
             latestScan =
                 await scanner.scan({
 
                     includeDOM:
-                        includeDOM.checked,
+                        includeDOM?.checked ?? true,
 
                     includeConsole:
-                        includeConsole.checked,
+                        includeConsole?.checked ?? true,
 
                     includeAudio:
-                        includeAudio.checked
+                        includeAudio?.checked ?? true
                 });
 
             renderer.renderScanResult(
@@ -434,7 +524,7 @@ ${JSON.stringify(
             renderer.renderError(
                 resultEl,
                 err.message ||
-                'Scan failed.'
+                'Project scan failed.'
             );
 
         } finally {
@@ -443,32 +533,32 @@ ${JSON.stringify(
         }
     }
 
-    // =====================================================
-    // FIX HANDLER
-    // =====================================================
+    // -------------------------------------------------------------------------
+    // FIX
+    // -------------------------------------------------------------------------
 
     async function handleFix() {
 
-        const userPrompt =
-            promptEl.value.trim();
-
-        if (!userPrompt) {
-
-            renderer.renderError(
-                resultEl,
-                'Describe the issue first.'
-            );
-
-            return;
-        }
-
-        fixBtn.disabled = true;
-
         try {
+
+            const userPrompt =
+                promptEl?.value?.trim();
+
+            if (!userPrompt) {
+
+                renderer.renderError(
+                    resultEl,
+                    'Describe the issue first.'
+                );
+
+                return;
+            }
+
+            fixBtn.disabled = true;
 
             renderer.renderLoading(
                 resultEl,
-                'Generating repair plan...'
+                'Generating AI repair plan...'
             );
 
             // AUTO SCAN
@@ -478,13 +568,13 @@ ${JSON.stringify(
                     await scanner.scan({
 
                         includeDOM:
-                            includeDOM.checked,
+                            includeDOM?.checked ?? true,
 
                         includeConsole:
-                            includeConsole.checked,
+                            includeConsole?.checked ?? true,
 
                         includeAudio:
-                            includeAudio.checked
+                            includeAudio?.checked ?? true
                     });
             }
 
@@ -496,7 +586,7 @@ ${JSON.stringify(
                     scan: latestScan
                 });
 
-            // RUNTIME
+            // AI CALL
             const response =
                 await runtime.askArchitect(
                     finalPrompt,
@@ -524,47 +614,9 @@ ${JSON.stringify(
         }
     }
 
-    // =====================================================
-    // EVENTS
-    // =====================================================
-
-    scanBtn.addEventListener(
-        'click',
-        handleScan
-    );
-
-    fixBtn.addEventListener(
-        'click',
-        handleFix
-    );
-
-    closeBtn.addEventListener(
-        'click',
-        destroyPanel
-    );
-
-    // =====================================================
-    // ESC
-    // =====================================================
-
-    function handleEscape(e) {
-
-        if (
-            e.key === 'Escape'
-        ) {
-
-            destroyPanel();
-        }
-    }
-
-    window.addEventListener(
-        'keydown',
-        handleEscape
-    );
-
-    // =====================================================
+    // -------------------------------------------------------------------------
     // DESTROY
-    // =====================================================
+    // -------------------------------------------------------------------------
 
     function destroyPanel() {
 
@@ -589,9 +641,47 @@ ${JSON.stringify(
             null;
     }
 
-    // =====================================================
+    // -------------------------------------------------------------------------
+    // ESC
+    // -------------------------------------------------------------------------
+
+    function handleEscape(event) {
+
+        if (
+            event.key === 'Escape'
+        ) {
+
+            destroyPanel();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // EVENTS
+    // -------------------------------------------------------------------------
+
+    scanBtn.addEventListener(
+        'click',
+        handleScan
+    );
+
+    fixBtn.addEventListener(
+        'click',
+        handleFix
+    );
+
+    closeBtn.addEventListener(
+        'click',
+        destroyPanel
+    );
+
+    window.addEventListener(
+        'keydown',
+        handleEscape
+    );
+
+    // -------------------------------------------------------------------------
     // API
-    // =====================================================
+    // -------------------------------------------------------------------------
 
     const api = {
 
@@ -617,11 +707,15 @@ ${JSON.stringify(
         }
     };
 
+    // -------------------------------------------------------------------------
+    // GLOBAL
+    // -------------------------------------------------------------------------
+
     window.__architectPanelAPI =
         api;
 
     console.log(
-        '🧠 Architect Console mounted.'
+        '🧠 Architect Console mounted successfully.'
     );
 
     return api;
