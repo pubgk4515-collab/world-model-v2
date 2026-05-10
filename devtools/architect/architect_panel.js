@@ -13,9 +13,6 @@ import {
     createPromptBuilder
 } from './architect_prompt_builder.js';
 
-import ArchitectRenderer
-from './architect_renderer.js';
-
 export function createArchitectPanel() {
 
     // =====================================================
