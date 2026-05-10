@@ -498,16 +498,19 @@ export default class WindExpert {
     // ======================================================
 
     const bedA =
-      0.10 +
-      energy * 0.22;
+  0.015 +
+  Math.pow(energy, 1.7) * 0.26;
 
-    const bedB =
-      0.08 +
-      energy * 0.18;
+const bedB =
+  0.01 +
+  Math.pow(energy, 1.9) * 0.20;
 
     const air =
-      0.01 +
-      this.state.air * 0.04;
+  0.001 +
+  (
+    this.state.air *
+    Math.pow(energy, 1.8)
+  ) * 0.028;
 
     const output =
       0.38 +
