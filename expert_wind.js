@@ -333,7 +333,7 @@ export default class WindExpert {
 
     // White noise, lightly smoothed by a tiny moving average later in the graph.
     for (let i = 0; i < frameCount; i++) {
-      channel[i] = (Math.random() * 2 - 1) * 0.95;
+      channel[i] = (Math.random() * 2 - 1);
     }
 
     return buffer;
@@ -360,7 +360,7 @@ export default class WindExpert {
 
     // Root output
     this.outputGain = ctx.createGain();
-    this.outputGain.gain.value = 0.0;
+    this.outputGain.gain.value = 0.85;
 
     this.stereoPanner = ctx.createStereoPanner();
     this.stereoPanner.pan.value = 0.0;
@@ -382,7 +382,7 @@ export default class WindExpert {
 
     this.bedLP = ctx.createBiquadFilter();
     this.bedLP.type = 'lowpass';
-    this.bedLP.frequency.value = 1700;
+    this.bedLP.frequency.value = 4200;
     this.bedLP.Q.value = 0.68;
 
     this.bedGain = ctx.createGain();
@@ -406,7 +406,7 @@ export default class WindExpert {
 
     this.gustLP = ctx.createBiquadFilter();
     this.gustLP.type = 'lowpass';
-    this.gustLP.frequency.value = 1500;
+    this.gustLP.frequency.value = 5200;
     this.gustLP.Q.value = 0.78;
 
     this.gustGain = ctx.createGain();
@@ -508,8 +508,8 @@ export default class WindExpert {
     const gustEnergy = this._computeGustEnergy();
     const openness = pickEnclosureFactor(this.world.enclosure);
 
-    const bedGainTarget = 0.0008 + windEnergy * 0.09;
-    const gustGainTarget = 0.0001 + gustEnergy * 0.055;
+    const bedGainTarget = 0.02 + windEnergy * 0.22;
+    const gustGainTarget = 0.01 + gustEnergy * 0.16;
 
     const bedHPHz = 20 + this.state.texture * 26 + (1 - openness) * 10;
     const bedLPHz = 880 + windEnergy * 2200 + this.state.texture * 1200;
