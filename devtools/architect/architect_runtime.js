@@ -13,7 +13,7 @@ from './architect_renderer.js';
 import scanProject
 from './architect_scanner.js';
 
-import buildArchitectPrompt
+import * as PromptBuilder
 from './architect_prompt_builder.js';
 
 // -----------------------------------------------------------------------------
@@ -249,7 +249,7 @@ export default class ArchitectRuntime {
             // -----------------------------------------------------------------
 
             const payload =
-                buildArchitectPrompt({
+                PromptBuilder.buildArchitectPrompt({
 
                     issue,
                     scan
