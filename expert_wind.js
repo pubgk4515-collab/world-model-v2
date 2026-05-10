@@ -1,35 +1,31 @@
 /**
  * expert_wind.js
- * ============================================================
+ * =========================================================
  * Symbiote Studio · Ultra Atmospheric Wind Expert
- * ============================================================
+ * ---------------------------------------------------------
+ * Procedural wind synthesis designed for:
+ * - sleep ambience
+ * - cinematic environments
+ * - natural airflow perception
+ * - realistic gentle breeze → storm evolution
  *
- * GOAL:
- * Real moving air.
+ * NO prerecorded samples.
+ * NO AI generation.
+ * ONLY Web Audio API.
+ *
+ * Philosophy:
+ * Real wind is:
+ * - filtered turbulence
+ * - moving air masses
+ * - resonant cavities
+ * - evolving pressure
+ * - slow spatial motion
  *
  * NOT:
  * - TV static
+ * - white noise hiss
  * - earthquake rumble
- * - fake storm hiss
- * - harsh white noise
- *
- * FEATURES:
- * - Brown/Pink airflow synthesis
- * - Resonant cavity whistles
- * - Procedural gust evolution
- * - Crossfaded seamless looping
- * - Stereo atmospheric drift
- * - Dynamic turbulence
- * - Soft breeze → violent storm scaling
- * - Zero external assets
- *
- * ARCHITECTURE:
- * Air Bed
- * → Turbulence
- * → Resonant Cavities
- * → Pressure Body
- * → Stereo Drift
- *
+ * - fake cinematic bass
  */
 
 export default class WindExpert {
@@ -47,410 +43,289 @@ export default class WindExpert {
 
       intensity: 0.28,
       texture: 0.42,
-      resonance: 0.45,
-      movement: 0.55,
-      width: 0.72,
-
-      enclosure: "open",
-      pressure: 0.5
+      resonance: 0.35,
+      movement: 0.50,
+      width: 0.70
     };
 
     this.nodes = {};
-    this.modulators = [];
+    this.modulation = [];
     this.noiseSources = [];
 
-    this.build();
-    this.start();
+    this._buildEngine();
+    this._startAtmosphere();
   }
 
-  /* ============================================================
-     BUILD ENGINE
-  ============================================================ */
+  /* ======================================================
+     ENGINE
+  ====================================================== */
 
-  build() {
+  _buildEngine() {
 
     const ctx = this.ctx;
 
-    /* ------------------------------------------------------------
+    /* --------------------------------------------------
        MASTER
-    ------------------------------------------------------------ */
+    -------------------------------------------------- */
 
-    this.output = ctx.createGain();
-    this.output.gain.value = 0;
+    this.nodes.output = ctx.createGain();
+    this.nodes.output.gain.value = 0;
 
-    this.output.connect(this.masterBus);
+    this.nodes.output.connect(this.masterBus);
 
-    /* ------------------------------------------------------------
-       MAIN MIX
-    ------------------------------------------------------------ */
+    /* --------------------------------------------------
+       NOISE BUFFERS
+    -------------------------------------------------- */
 
-    this.mainMix = ctx.createGain();
-    this.mainMix.gain.value = 1;
+    const pinkBuffer =
+      this._createPinkNoiseBuffer(8);
 
-    this.mainMix.connect(this.output);
+    const brownBuffer =
+      this._createBrownNoiseBuffer(8);
 
-    /* ------------------------------------------------------------
-       AIRFLOW BED
-    ------------------------------------------------------------ */
+    /* --------------------------------------------------
+       BASE AIRFLOW
+    -------------------------------------------------- */
 
-    this.airNoise = this.createPinkNoise();
+    const baseSource =
+      this._createLoopingNoise(pinkBuffer);
 
-    this.airGain = ctx.createGain();
-    this.airGain.gain.value = 0.12;
-
-    this.airHP = ctx.createBiquadFilter();
-    this.airHP.type = "highpass";
-    this.airHP.frequency.value = 280;
-
-    this.airLP = ctx.createBiquadFilter();
-    this.airLP.type = "lowpass";
-    this.airLP.frequency.value = 4200;
-
-    this.airNoise.connect(this.airGain);
-    this.airGain.connect(this.airHP);
-    this.airHP.connect(this.airLP);
-
-    /* ------------------------------------------------------------
-       TURBULENCE
-    ------------------------------------------------------------ */
-
-    this.turbulenceNoise = this.createPinkNoise();
-
-    this.turbulenceGain = ctx.createGain();
-    this.turbulenceGain.gain.value = 0.03;
-
-    this.turbulenceBandA =
+    const baseHP =
       ctx.createBiquadFilter();
 
-    this.turbulenceBandA.type =
-      "bandpass";
+    baseHP.type = 'highpass';
+    baseHP.frequency.value = 180;
+    baseHP.Q.value = 0.7;
 
-    this.turbulenceBandA.frequency.value =
-      700;
-
-    this.turbulenceBandA.Q.value =
-      0.8;
-
-    this.turbulenceBandB =
+    const baseLP =
       ctx.createBiquadFilter();
 
-    this.turbulenceBandB.type =
-      "bandpass";
+    baseLP.type = 'lowpass';
+    baseLP.frequency.value = 4500;
+    baseLP.Q.value = 0.3;
 
-    this.turbulenceBandB.frequency.value =
-      1300;
-
-    this.turbulenceBandB.Q.value =
-      1.2;
-
-    this.turbulenceNoise.connect(
-      this.turbulenceGain
-    );
-
-    this.turbulenceGain.connect(
-      this.turbulenceBandA
-    );
-
-    this.turbulenceGain.connect(
-      this.turbulenceBandB
-    );
-
-    /* ------------------------------------------------------------
-       RESONANT CAVITIES
-       (THE MAGIC)
-    ------------------------------------------------------------ */
-
-    this.resonanceBus =
+    const baseGain =
       ctx.createGain();
 
-    this.resonanceBus.gain.value =
-      0.16;
+    baseGain.gain.value = 0.05;
 
-    this.resonators = [];
+    baseSource.connect(baseHP);
+    baseHP.connect(baseLP);
+    baseLP.connect(baseGain);
 
-    const cavityFreqs = [
+    /* --------------------------------------------------
+       AIR TEXTURE
+    -------------------------------------------------- */
+
+    const textureSource =
+      this._createLoopingNoise(pinkBuffer);
+
+    const textureBand =
+      ctx.createBiquadFilter();
+
+    textureBand.type = 'bandpass';
+    textureBand.frequency.value = 1200;
+    textureBand.Q.value = 1.8;
+
+    const textureGain =
+      ctx.createGain();
+
+    textureGain.gain.value = 0.02;
+
+    textureSource.connect(textureBand);
+    textureBand.connect(textureGain);
+
+    /* --------------------------------------------------
+       PRESSURE BODY
+       (low-mid air mass, NOT sub bass)
+    -------------------------------------------------- */
+
+    const bodySource =
+      this._createLoopingNoise(brownBuffer);
+
+    const bodyHP =
+      ctx.createBiquadFilter();
+
+    bodyHP.type = 'highpass';
+    bodyHP.frequency.value = 90;
+
+    const bodyLP =
+      ctx.createBiquadFilter();
+
+    bodyLP.type = 'lowpass';
+    bodyLP.frequency.value = 380;
+
+    const bodyGain =
+      ctx.createGain();
+
+    bodyGain.gain.value = 0.01;
+
+    bodySource.connect(bodyHP);
+    bodyHP.connect(bodyLP);
+    bodyLP.connect(bodyGain);
+
+    /* --------------------------------------------------
+       RESONANT FLUTE CAVITIES
+    -------------------------------------------------- */
+
+    const resonanceInput =
+      ctx.createGain();
+
+    textureGain.connect(resonanceInput);
+
+    const resonances = [];
+
+    const resonanceFreqs = [
       320,
       470,
-      620,
-      780,
-      940
+      720,
+      980
     ];
 
-    cavityFreqs.forEach((freq, i) => {
+    resonanceFreqs.forEach((freq) => {
 
       const bp =
         ctx.createBiquadFilter();
 
-      bp.type =
-        "bandpass";
-
-      bp.frequency.value =
-        freq;
-
-      bp.Q.value =
-        14;
+      bp.type = 'bandpass';
+      bp.frequency.value = freq;
+      bp.Q.value = 14;
 
       const gain =
         ctx.createGain();
 
-      gain.gain.value =
-        0.04;
+      gain.gain.value = 0.012;
 
-      this.turbulenceBandA.connect(bp);
+      resonanceInput.connect(bp);
       bp.connect(gain);
-      gain.connect(this.resonanceBus);
 
-      this.resonators.push({
+      resonances.push({
         filter: bp,
         gain
       });
-
-      /* slow drift */
-
-      const lfo =
-        ctx.createOscillator();
-
-      const depth =
-        ctx.createGain();
-
-      lfo.frequency.value =
-        0.008 + i * 0.003;
-
-      depth.gain.value =
-        20 + i * 4;
-
-      lfo.connect(depth);
-      depth.connect(bp.frequency);
-
-      lfo.start();
-
-      this.modulators.push({
-        osc: lfo,
-        gain: depth
-      });
     });
 
-    /* ------------------------------------------------------------
-       PRESSURE BODY
-    ------------------------------------------------------------ */
-
-    this.bodyNoise =
-      this.createBrownNoise();
-
-    this.bodyGain =
-      ctx.createGain();
-
-    this.bodyGain.gain.value =
-      0.015;
-
-    this.bodyHP =
-      ctx.createBiquadFilter();
-
-    this.bodyHP.type =
-      "highpass";
-
-    this.bodyHP.frequency.value =
-      90;
-
-    this.bodyLow =
-      ctx.createBiquadFilter();
-
-    this.bodyLow.type =
-      "lowpass";
-
-    this.bodyLow.frequency.value =
-      420;
-
-    this.bodyNoise.connect(
-      this.bodyGain
-    );
-
-    this.bodyGain.connect(
-      this.bodyHP
-    );
-
-    this.bodyHP.connect(
-      this.bodyLow
-    );
-
-    /* ------------------------------------------------------------
-       COMB AIR RESONANCE
-    ------------------------------------------------------------ */
-
-    this.delay =
-      ctx.createDelay(0.1);
-
-    this.delay.delayTime.value =
-      0.012;
-
-    this.feedback =
-      ctx.createGain();
-
-    this.feedback.gain.value =
-      0.18;
-
-    this.resonanceBus.connect(
-      this.delay
-    );
-
-    this.delay.connect(
-      this.feedback
-    );
-
-    this.feedback.connect(
-      this.delay
-    );
-
-    /* ------------------------------------------------------------
+    /* --------------------------------------------------
        STEREO FIELD
-    ------------------------------------------------------------ */
+    -------------------------------------------------- */
 
-    this.stereo =
+    const merger =
+      ctx.createGain();
+
+    baseGain.connect(merger);
+    textureGain.connect(merger);
+    bodyGain.connect(merger);
+
+    resonances.forEach(r => {
+      r.gain.connect(merger);
+    });
+
+    const stereo =
       ctx.createStereoPanner();
 
-    this.stereo.pan.value =
-      0;
+    merger.connect(stereo);
+    stereo.connect(this.nodes.output);
 
-    /* ------------------------------------------------------------
-       FINAL TONE SHAPER
-    ------------------------------------------------------------ */
+    /* --------------------------------------------------
+       STORE
+    -------------------------------------------------- */
 
-    this.finalHP =
-      ctx.createBiquadFilter();
+    this.nodes.baseGain = baseGain;
+    this.nodes.textureGain = textureGain;
+    this.nodes.bodyGain = bodyGain;
 
-    this.finalHP.type =
-      "highpass";
+    this.nodes.baseLP = baseLP;
+    this.nodes.baseHP = baseHP;
 
-    this.finalHP.frequency.value =
-      120;
+    this.nodes.textureBand =
+      textureBand;
 
-    this.finalLP =
-      ctx.createBiquadFilter();
+    this.nodes.stereo = stereo;
 
-    this.finalLP.type =
-      "lowpass";
+    this.nodes.resonances =
+      resonances;
 
-    this.finalLP.frequency.value =
-      9000;
+    /* --------------------------------------------------
+       ATMOSPHERIC LFOs
+    -------------------------------------------------- */
 
-    /* ------------------------------------------------------------
-       CONNECT GRAPH
-    ------------------------------------------------------------ */
+    this._createLFO(
+      0.018,
+      (v) => {
 
-    this.airLP.connect(this.mainMix);
+        const drift =
+          1100 + (v * 240);
 
-    this.turbulenceBandA.connect(
-      this.mainMix
+        textureBand.frequency
+          .setTargetAtTime(
+            drift,
+            ctx.currentTime,
+            0.5
+          );
+      }
     );
 
-    this.turbulenceBandB.connect(
-      this.mainMix
+    this._createLFO(
+      0.011,
+      (v) => {
+
+        stereo.pan
+          .setTargetAtTime(
+            v * this.state.width * 0.45,
+            ctx.currentTime,
+            1.2
+          );
+      }
     );
 
-    this.resonanceBus.connect(
-      this.mainMix
+    this._createLFO(
+      0.008,
+      (v) => {
+
+        resonances.forEach((r, i) => {
+
+          const base =
+            resonanceFreqs[i];
+
+          r.filter.frequency
+            .setTargetAtTime(
+              base + (v * 40),
+              ctx.currentTime,
+              1.5
+            );
+        });
+      }
     );
 
-    this.delay.connect(
-      this.mainMix
-    );
+    /* --------------------------------------------------
+       START FADE
+    -------------------------------------------------- */
 
-    this.bodyLow.connect(
-      this.mainMix
-    );
+    this.nodes.output.gain
+      .setTargetAtTime(
+        0.75,
+        ctx.currentTime,
+        2.5
+      );
 
-    this.mainMix.connect(
-      this.finalHP
-    );
-
-    this.finalHP.connect(
-      this.finalLP
-    );
-
-    this.finalLP.connect(
-      this.stereo
-    );
-
-    this.stereo.connect(
-      this.output
-    );
-
-    /* ------------------------------------------------------------
-       ATMOSPHERIC MOVEMENT
-    ------------------------------------------------------------ */
-
-    this.panLFO =
-      ctx.createOscillator();
-
-    this.panDepth =
-      ctx.createGain();
-
-    this.panLFO.frequency.value =
-      0.018;
-
-    this.panDepth.gain.value =
-      0.12;
-
-    this.panLFO.connect(
-      this.panDepth
-    );
-
-    this.panDepth.connect(
-      this.stereo.pan
-    );
-
-    this.panLFO.start();
-
-    this.modulators.push({
-      osc: this.panLFO,
-      gain: this.panDepth
-    });
-
-    /* ------------------------------------------------------------
-       GUST ENGINE
-    ------------------------------------------------------------ */
-
-    this.startGustEngine();
-
-    /* ------------------------------------------------------------
-       INITIAL UPDATE
-    ------------------------------------------------------------ */
-
-    this.updateDSP();
+    this._updateSound();
   }
 
-  /* ============================================================
-     START
-  ============================================================ */
+  /* ======================================================
+     NOISE
+  ====================================================== */
 
-  start() {
-
-    const now =
-      this.ctx.currentTime;
-
-    this.output.gain.setValueAtTime(
-      0,
-      now
-    );
-
-    this.output.gain.linearRampToValueAtTime(
-      0.85,
-      now + 4
-    );
-  }
-
-  /* ============================================================
-     NOISE GENERATORS
-  ============================================================ */
-
-  createPinkNoise() {
+  _createPinkNoiseBuffer(seconds) {
 
     const ctx = this.ctx;
+
+    const length =
+      ctx.sampleRate * seconds;
 
     const buffer =
       ctx.createBuffer(
         1,
-        ctx.sampleRate * 6,
+        length,
         ctx.sampleRate
       );
 
@@ -465,7 +340,7 @@ export default class WindExpert {
     let b5 = 0;
     let b6 = 0;
 
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0; i < length; i++) {
 
       const white =
         Math.random() * 2 - 1;
@@ -506,222 +381,196 @@ export default class WindExpert {
         pink * 0.08;
     }
 
-    const source =
-      this.ctx.createBufferSource();
-
-    source.buffer =
-      buffer;
-
-    source.loop =
-      true;
-
-    source.start();
-
-    this.noiseSources.push(source);
-
-    return source;
+    return buffer;
   }
 
-  createBrownNoise() {
+  _createBrownNoiseBuffer(seconds) {
 
-    const ctx =
-      this.ctx;
+    const ctx = this.ctx;
+
+    const length =
+      ctx.sampleRate * seconds;
 
     const buffer =
       ctx.createBuffer(
         1,
-        ctx.sampleRate * 6,
+        length,
         ctx.sampleRate
       );
 
     const data =
       buffer.getChannelData(0);
 
-    let lastOut = 0;
+    let last = 0;
 
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0; i < length; i++) {
 
       const white =
         Math.random() * 2 - 1;
 
-      lastOut =
-        (lastOut +
-          0.02 * white) / 1.02;
+      last =
+        (last + (0.02 * white)) / 1.02;
 
       data[i] =
-        lastOut * 3.5;
+        last * 3.5;
     }
 
-    const source =
-      ctx.createBufferSource();
-
-    source.buffer =
-      buffer;
-
-    source.loop =
-      true;
-
-    source.start();
-
-    this.noiseSources.push(source);
-
-    return source;
+    return buffer;
   }
 
-  /* ============================================================
-     GUST EVOLUTION
-  ============================================================ */
+  _createLoopingNoise(buffer) {
 
-  startGustEngine() {
+    const src =
+      this.ctx.createBufferSource();
 
-    const evolve = () => {
+    src.buffer = buffer;
+    src.loop = true;
 
-      const now =
-        this.ctx.currentTime;
+    src.start();
 
-      const intensity =
-        this.state.intensity;
+    this.noiseSources.push(src);
 
-      const gust =
-        intensity *
-        (0.5 + Math.random() * 0.8);
+    return src;
+  }
 
-      /* airflow */
+  /* ======================================================
+     MODULATION
+  ====================================================== */
 
-      this.airGain.gain.cancelScheduledValues(now);
+  _createLFO(rate, callback) {
 
-      this.airGain.gain.linearRampToValueAtTime(
-        0.02 + gust * 0.22,
-        now + 4 + Math.random() * 4
-      );
+    let phase =
+      Math.random() * Math.PI * 2;
 
-      /* turbulence */
+    const tick = () => {
 
-      this.turbulenceGain.gain.cancelScheduledValues(now);
+      phase +=
+        rate * 0.03;
 
-      this.turbulenceGain.gain.linearRampToValueAtTime(
-        gust * 0.09,
-        now + 5
-      );
+      const v =
+        Math.sin(phase);
 
-      /* body */
+      callback(v);
 
-      this.bodyGain.gain.cancelScheduledValues(now);
+      const id =
+        requestAnimationFrame(tick);
 
-      this.bodyGain.gain.linearRampToValueAtTime(
-        gust * 0.045,
-        now + 6
-      );
-
-      /* stereo motion */
-
-      this.panDepth.gain.cancelScheduledValues(now);
-
-      this.panDepth.gain.linearRampToValueAtTime(
-        0.02 + gust * 0.26,
-        now + 8
-      );
-
-      /* resonance bloom */
-
-      this.resonanceBus.gain.cancelScheduledValues(now);
-
-      this.resonanceBus.gain.linearRampToValueAtTime(
-        0.03 + gust * 0.24,
-        now + 6
-      );
-
-      /* next cycle */
-
-      const next =
-        5000 +
-        Math.random() * 7000;
-
-      this.gustTimer =
-        setTimeout(
-          evolve,
-          next
-        );
+      this.modulation.push(id);
     };
 
-    evolve();
+    tick();
   }
 
-  /* ============================================================
-     DSP UPDATE
-  ============================================================ */
+  /* ======================================================
+     PARAMETER UPDATE
+  ====================================================== */
 
-  updateDSP() {
+  _updateSound() {
 
-    const now =
-      this.ctx.currentTime;
+    const ctx = this.ctx;
 
-    const intensity =
+    const energy =
       this.state.intensity;
 
+    /* --------------------------------------------------
+       BASE AIR
+    -------------------------------------------------- */
+
+    const baseAir =
+      0.006 +
+      Math.pow(energy, 1.7) *
+      0.16;
+
+    this.nodes.baseGain.gain
+      .setTargetAtTime(
+        baseAir,
+        ctx.currentTime,
+        0.4
+      );
+
+    /* --------------------------------------------------
+       TEXTURE
+    -------------------------------------------------- */
+
     const texture =
-      this.state.texture;
+      (
+        this.state.texture *
+        Math.pow(energy, 1.8)
+      ) * 0.08;
 
-    const resonance =
-      this.state.resonance;
-
-    const movement =
-      this.state.movement;
-
-    /* low intensity = soft breeze */
-
-    this.airLP.frequency.setTargetAtTime(
-      2600 + texture * 5000,
-      now,
-      1.5
-    );
-
-    this.airHP.frequency.setTargetAtTime(
-      260 - intensity * 120,
-      now,
-      1.5
-    );
-
-    /* resonance */
-
-    this.resonators.forEach((r, i) => {
-
-      r.gain.gain.setTargetAtTime(
-        0.01 +
-        resonance * 0.06,
-        now,
-        2
+    this.nodes.textureGain.gain
+      .setTargetAtTime(
+        texture,
+        ctx.currentTime,
+        0.4
       );
 
-      r.filter.Q.setTargetAtTime(
-        10 +
-        resonance * 12,
-        now,
-        2
+    /* --------------------------------------------------
+       BODY
+    -------------------------------------------------- */
+
+    const body =
+      Math.pow(energy, 2.5)
+      * 0.09;
+
+    this.nodes.bodyGain.gain
+      .setTargetAtTime(
+        body,
+        ctx.currentTime,
+        0.8
       );
-    });
 
-    /* storm body */
+    /* --------------------------------------------------
+       RESONANCE
+    -------------------------------------------------- */
 
-    this.bodyLow.frequency.setTargetAtTime(
-      220 + intensity * 260,
-      now,
-      2
-    );
+    const resonanceLevel =
+      (
+        this.state.resonance *
+        Math.pow(energy, 2.1)
+      ) * 0.055;
 
-    /* stereo */
+    this.nodes.resonances
+      .forEach((r) => {
 
-    this.panDepth.gain.setTargetAtTime(
-      0.03 +
-      movement * 0.24,
-      now,
-      2
-    );
+        r.gain.gain
+          .setTargetAtTime(
+            resonanceLevel,
+            ctx.currentTime,
+            0.8
+          );
+      });
+
+    /* --------------------------------------------------
+       FILTER SHAPE
+    -------------------------------------------------- */
+
+    const openness =
+      2500 +
+      energy * 5200;
+
+    this.nodes.baseLP.frequency
+      .setTargetAtTime(
+        openness,
+        ctx.currentTime,
+        0.7
+      );
+
+    const thickness =
+      260 -
+      energy * 140;
+
+    this.nodes.baseHP.frequency
+      .setTargetAtTime(
+        thickness,
+        ctx.currentTime,
+        0.6
+      );
   }
 
-  /* ============================================================
+  /* ======================================================
      UI
-  ============================================================ */
+  ====================================================== */
 
   getUICard() {
 
@@ -754,7 +603,6 @@ export default class WindExpert {
         <div class="expert-grid">
 
           <label class="expert-control">
-
             <span>Intensity</span>
 
             <input
@@ -764,11 +612,9 @@ export default class WindExpert {
               max="100"
               value="28"
             />
-
           </label>
 
           <label class="expert-control">
-
             <span>Texture</span>
 
             <input
@@ -778,11 +624,9 @@ export default class WindExpert {
               max="100"
               value="42"
             />
-
           </label>
 
           <label class="expert-control">
-
             <span>Resonance</span>
 
             <input
@@ -790,13 +634,11 @@ export default class WindExpert {
               type="range"
               min="0"
               max="100"
-              value="45"
+              value="35"
             />
-
           </label>
 
           <label class="expert-control">
-
             <span>Movement</span>
 
             <input
@@ -804,9 +646,20 @@ export default class WindExpert {
               type="range"
               min="0"
               max="100"
-              value="55"
+              value="50"
             />
+          </label>
 
+          <label class="expert-control">
+            <span>Width</span>
+
+            <input
+              class="wind-width"
+              type="range"
+              min="0"
+              max="100"
+              value="70"
+            />
           </label>
 
         </div>
@@ -818,126 +671,122 @@ export default class WindExpert {
   bindCardControls(card) {
 
     card
-      .querySelector(".wind-intensity")
-      .addEventListener("input", e => {
+      .querySelector('.wind-intensity')
+      .addEventListener('input', (e) => {
 
         this.state.intensity =
           e.target.value / 100;
 
-        this.updateDSP();
+        this._updateSound();
       });
 
     card
-      .querySelector(".wind-texture")
-      .addEventListener("input", e => {
+      .querySelector('.wind-texture')
+      .addEventListener('input', (e) => {
 
         this.state.texture =
           e.target.value / 100;
 
-        this.updateDSP();
+        this._updateSound();
       });
 
     card
-      .querySelector(".wind-resonance")
-      .addEventListener("input", e => {
+      .querySelector('.wind-resonance')
+      .addEventListener('input', (e) => {
 
         this.state.resonance =
           e.target.value / 100;
 
-        this.updateDSP();
+        this._updateSound();
       });
 
     card
-      .querySelector(".wind-movement")
-      .addEventListener("input", e => {
+      .querySelector('.wind-movement')
+      .addEventListener('input', (e) => {
 
         this.state.movement =
           e.target.value / 100;
+      });
 
-        this.updateDSP();
+    card
+      .querySelector('.wind-width')
+      .addEventListener('input', (e) => {
+
+        this.state.width =
+          e.target.value / 100;
       });
   }
 
-  /* ============================================================
+  /* ======================================================
      WORLD STATE
-  ============================================================ */
+  ====================================================== */
 
   onWorldStateUpdate(state) {
 
-    this.state.enclosure =
-      state.enclosure;
+    if (!state) return;
 
-    this.state.pressure =
-      state.atmosphericPressure;
+    if (state.enclosure === 'indoor') {
 
-    const now =
-      this.ctx.currentTime;
-
-    if (state.enclosure === "indoor") {
-
-      this.finalLP.frequency.setTargetAtTime(
-        2400,
-        now,
-        3
-      );
+      this.nodes.baseLP.frequency
+        .setTargetAtTime(
+          2200,
+          this.ctx.currentTime,
+          1.5
+        );
     }
 
-    else if (
-      state.enclosure === "umbrella"
-    ) {
+    if (state.enclosure === 'umbrella') {
 
-      this.finalLP.frequency.setTargetAtTime(
-        4200,
-        now,
-        3
-      );
-    }
-
-    else {
-
-      this.finalLP.frequency.setTargetAtTime(
-        9000,
-        now,
-        3
-      );
+      this.nodes.baseLP.frequency
+        .setTargetAtTime(
+          3800,
+          this.ctx.currentTime,
+          1.5
+        );
     }
   }
 
-  /* ============================================================
+  /* ======================================================
+     START
+  ====================================================== */
+
+  _startAtmosphere() {
+
+    this.nodes.output.gain
+      .setTargetAtTime(
+        0.65,
+        this.ctx.currentTime,
+        3
+      );
+  }
+
+  /* ======================================================
      DESTROY
-  ============================================================ */
+  ====================================================== */
 
   destroy() {
 
-    clearTimeout(
-      this.gustTimer
-    );
-
-    this.noiseSources.forEach(s => {
+    this.noiseSources.forEach(src => {
       try {
-        s.stop();
-        s.disconnect();
+        src.stop();
+        src.disconnect();
       } catch {}
     });
 
-    this.modulators.forEach(m => {
-      try {
-        m.osc.stop();
-        m.osc.disconnect();
-      } catch {}
+    this.modulation.forEach(id => {
+      cancelAnimationFrame(id);
     });
 
-    this.output.gain.linearRampToValueAtTime(
-      0,
-      this.ctx.currentTime + 2
-    );
+    Object.values(this.nodes)
+      .forEach(node => {
 
-    setTimeout(() => {
+        try {
 
-      try {
-        this.output.disconnect();
-      } catch {}
+          if (node.disconnect) {
+            node.disconnect();
+          }
 
-    }, 2500);
+        } catch {}
+      });
   }
-        }
+}
