@@ -5,37 +5,40 @@
 
   <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
   />
+  <meta name="theme-color" content="#030303" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="format-detection" content="telephone=no, date=no, email=no, address=no" />
 
   <title>Symbiote Studio · MoE World Model</title>
 
-  <!-- ======================================================
-       FONTS
-  ======================================================= -->
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    rel="preconnect"
-    href="https://fonts.gstatic.com"
-    crossorigin
-  />
-
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
 
-  <!-- ======================================================
-       STYLES
-  ======================================================= -->
-
   <style>
-
-    /* ======================================================
-       RESET
-    ======================================================= */
+    :root {
+      --bg: #030303;
+      --panel: rgba(255, 255, 255, 0.05);
+      --panel-strong: rgba(255, 255, 255, 0.08);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: rgba(255, 255, 255, 0.94);
+      --muted: rgba(255, 255, 255, 0.56);
+      --label: rgba(255, 255, 255, 0.72);
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.62);
+      --radius-xl: 30px;
+      --radius-lg: 22px;
+      --radius-md: 18px;
+      --violet: #7c3aed;
+      --cobalt: #2563eb;
+      --dock-space: 118px;
+      --app-max: 560px;
+    }
 
     *,
     *::before,
@@ -45,58 +48,29 @@
       padding: 0;
     }
 
-    :root {
-
-      --bg: #030303;
-
-      --text: rgba(255,255,255,0.92);
-      --muted: rgba(255,255,255,0.5);
-      --label: rgba(255,255,255,0.72);
-
-      --glass:
-        rgba(255,255,255,0.04);
-
-      --glass-strong:
-        rgba(255,255,255,0.06);
-
-      --border:
-        rgba(255,255,255,0.06);
-
-      --shadow:
-        0 20px 60px rgba(0,0,0,0.65);
-
-      --radius-xl: 28px;
-      --radius-lg: 22px;
-      --radius-md: 18px;
-
-      --violet: #7c3aed;
-      --cobalt: #2563eb;
+    html {
+      width: 100%;
+      min-height: 100%;
+      overflow-x: hidden;
+      background: var(--bg);
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      color-scheme: dark;
     }
 
-    html,
     body {
       width: 100%;
-      height: 100%;
+      min-height: 100svh;
       overflow: hidden;
-      background: var(--bg);
+      background: radial-gradient(circle at top, rgba(124, 58, 237, 0.08), transparent 35%),
+                  radial-gradient(circle at bottom right, rgba(37, 99, 235, 0.08), transparent 32%),
+                  var(--bg);
       color: var(--text);
-      font-family:
-        "Inter",
-        system-ui,
-        -apple-system,
-        BlinkMacSystemFont,
-        sans-serif;
-
-      -webkit-font-smoothing:
-        antialiased;
-
-      text-rendering:
-        optimizeLegibility;
-    }
-
-    body {
-      position: relative;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
       overscroll-behavior: none;
+      position: relative;
     }
 
     button,
@@ -105,889 +79,574 @@
       font: inherit;
     }
 
-    /* ======================================================
-       BACKGROUND ORBS
-    ======================================================= */
+    button,
+    select {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
 
+    /* =========================
+       BACKGROUND ORBS
+    ========================== */
     .orb {
       position: fixed;
       border-radius: 999px;
       pointer-events: none;
-      filter: blur(140px);
-      opacity: 0.6;
       z-index: 0;
-      will-change:
-        transform,
-        opacity;
+      filter: blur(140px);
+      opacity: 0.55;
+      will-change: transform, opacity;
     }
 
     .orb-violet {
-
       width: 78vw;
       height: 78vw;
-
       max-width: 720px;
       max-height: 720px;
-
       top: -18%;
       left: -18%;
-
-      background:
-        radial-gradient(
-          circle,
-          rgba(124,58,237,0.85) 0%,
-          rgba(124,58,237,0.15) 55%,
-          transparent 100%
-        );
-
-      animation:
-        breatheViolet 14s ease-in-out infinite;
+      background: radial-gradient(circle, rgba(124, 58, 237, 0.86) 0%, rgba(124, 58, 237, 0.16) 54%, transparent 100%);
+      animation: breatheViolet 14s ease-in-out infinite;
     }
 
     .orb-cobalt {
-
       width: 88vw;
       height: 88vw;
-
       max-width: 820px;
       max-height: 820px;
-
       right: -28%;
       bottom: -24%;
-
-      background:
-        radial-gradient(
-          circle,
-          rgba(37,99,235,0.9) 0%,
-          rgba(37,99,235,0.16) 58%,
-          transparent 100%
-        );
-
-      animation:
-        breatheCobalt 18s ease-in-out infinite;
+      background: radial-gradient(circle, rgba(37, 99, 235, 0.88) 0%, rgba(37, 99, 235, 0.16) 58%, transparent 100%);
+      animation: breatheCobalt 18s ease-in-out infinite;
     }
 
     @keyframes breatheViolet {
-
-      0% {
-        transform:
-          scale(1)
-          translate3d(0,0,0);
-
-        opacity: 0.45;
+      0%, 100% {
+        transform: scale(1) translate3d(0, 0, 0);
+        opacity: 0.44;
       }
-
       50% {
-        transform:
-          scale(1.08)
-          translate3d(-2%, 2%, 0);
-
+        transform: scale(1.08) translate3d(-2%, 2%, 0);
         opacity: 0.68;
-      }
-
-      100% {
-        transform:
-          scale(1)
-          translate3d(0,0,0);
-
-        opacity: 0.45;
       }
     }
 
     @keyframes breatheCobalt {
-
-      0% {
-        transform:
-          scale(1)
-          translate3d(0,0,0);
-
+      0%, 100% {
+        transform: scale(1) translate3d(0, 0, 0);
         opacity: 0.38;
       }
-
       50% {
-        transform:
-          scale(1.12)
-          translate3d(3%, -2%, 0);
-
-        opacity: 0.64;
-      }
-
-      100% {
-        transform:
-          scale(1)
-          translate3d(0,0,0);
-
-        opacity: 0.38;
+        transform: scale(1.12) translate3d(3%, -2%, 0);
+        opacity: 0.62;
       }
     }
 
-    /* ======================================================
-       APP LAYOUT
-    ======================================================= */
-
+    /* =========================
+       APP SHELL
+    ========================== */
     .app-shell {
-
       position: relative;
       z-index: 2;
-
       width: 100%;
-      height: 100dvh;
-
+      min-height: 100svh;
       display: flex;
       flex-direction: column;
-
       overflow: hidden;
-
       padding:
         max(18px, env(safe-area-inset-top))
         16px
-        calc(128px + env(safe-area-inset-bottom));
+        calc(var(--dock-space) + env(safe-area-inset-bottom) + 16px);
+      max-width: var(--app-max);
+      margin: 0 auto;
     }
 
-    /* ======================================================
-       HEADER
-    ======================================================= */
-
+    /* =========================
+       HERO
+    ========================== */
     .hero {
-      padding:
-        8px 2px 26px;
-
+      padding: 6px 2px 22px;
       user-select: none;
+      flex: 0 0 auto;
     }
 
     .hero-title {
-
-      font-size:
-        clamp(2rem, 5vw, 2.6rem);
-
-      font-weight: 700;
-
-      letter-spacing:
-        -0.055em;
-
-      line-height: 1;
-
-      color:
-        rgba(255,255,255,0.95);
+      font-size: clamp(2rem, 5vw, 2.7rem);
+      font-weight: 800;
+      letter-spacing: -0.06em;
+      line-height: 0.98;
+      color: rgba(255, 255, 255, 0.96);
     }
 
     .hero-subtitle {
-
       margin-top: 10px;
-
-      font-size: 0.96rem;
-
+      font-size: 0.95rem;
       font-weight: 500;
-
-      letter-spacing:
-        -0.02em;
-
-      color:
-        rgba(255,255,255,0.5);
+      letter-spacing: -0.02em;
+      color: var(--muted);
     }
 
-    /* ======================================================
-       GLASS SYSTEM
-    ======================================================= */
-
+    /* =========================
+       GLASS
+    ========================== */
     .glass {
-
       background:
-        linear-gradient(
-          180deg,
-          rgba(255,255,255,0.06) 0%,
-          rgba(255,255,255,0.03) 100%
-        );
-
-      border:
-        1px solid var(--border);
-
-      backdrop-filter:
-        blur(24px);
-
-      -webkit-backdrop-filter:
-        blur(24px);
-
-      box-shadow:
-        var(--shadow);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.03) 100%);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: var(--shadow);
     }
 
-    /* ======================================================
+    /* =========================
        ROUTER CONSOLE
-    ======================================================= */
-
+    ========================== */
     #routerConsole {
-
-      border-radius:
-        var(--radius-xl);
-
-      padding:
-        22px 20px;
-
+      border-radius: var(--radius-xl);
+      padding: 20px 18px;
       display: flex;
       flex-direction: column;
-      gap: 22px;
-
+      gap: 20px;
       overflow: hidden;
+      flex: 0 0 auto;
     }
 
     .console-header {
-
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
     }
 
     .console-title {
-
       font-size: 1rem;
-      font-weight: 600;
-
-      letter-spacing:
-        -0.03em;
-
-      color:
-        rgba(255,255,255,0.92);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: rgba(255, 255, 255, 0.94);
     }
 
     .console-badge {
-
-      padding:
-        6px 10px;
-
+      padding: 6px 10px;
       border-radius: 999px;
-
-      background:
-        rgba(255,255,255,0.06);
-
-      border:
-        1px solid rgba(255,255,255,0.08);
-
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       font-size: 0.72rem;
-      font-weight: 600;
-
-      color:
-        rgba(255,255,255,0.58);
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.6);
+      white-space: nowrap;
     }
 
     .control-group {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
     .control-row {
-
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
     }
 
     .control-label {
-
-      font-size: 0.82rem;
-      font-weight: 600;
-
-      letter-spacing:
-        0.04em;
-
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-
-      color:
-        rgba(255,255,255,0.58);
+      color: rgba(255, 255, 255, 0.58);
     }
 
     .control-value {
-
       font-size: 0.84rem;
-      font-weight: 600;
-
-      color:
-        rgba(255,255,255,0.78);
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.8);
+      min-width: 44px;
+      text-align: right;
     }
 
-    /* ======================================================
-       CUSTOM SELECT
-    ======================================================= */
-
+    /* =========================
+       SELECT
+    ========================== */
     .select-shell {
       position: relative;
     }
 
     #enclosureSelect {
-
       width: 100%;
-
       border: none;
       outline: none;
-
-      border-radius:
-        var(--radius-md);
-
-      padding:
-        16px 18px;
-
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
       appearance: none;
       -webkit-appearance: none;
-
-      color:
-        rgba(255,255,255,0.92);
-
-      background:
-        rgba(255,255,255,0.05);
-
-      border:
-        1px solid rgba(255,255,255,0.06);
-
-      font-size: 1rem;
-      font-weight: 500;
-
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.94);
+      font-size: 16px;
+      font-weight: 600;
       cursor: pointer;
+      line-height: 1.2;
     }
 
     #enclosureSelect option {
       background: #111;
-      color: white;
+      color: #fff;
     }
 
     .select-chevron {
-
       position: absolute;
-
       right: 18px;
       top: 50%;
-
       width: 10px;
       height: 10px;
-
-      transform:
-        translateY(-70%)
-        rotate(-45deg);
-
-      border-left:
-        2px solid rgba(255,255,255,0.45);
-
-      border-bottom:
-        2px solid rgba(255,255,255,0.45);
-
+      transform: translateY(-70%) rotate(-45deg);
+      border-left: 2px solid rgba(255, 255, 255, 0.48);
+      border-bottom: 2px solid rgba(255, 255, 255, 0.48);
       pointer-events: none;
     }
 
-    /* ======================================================
-       PREMIUM SLIDER
-    ======================================================= */
-
+    /* =========================
+       RANGE SLIDER
+    ========================== */
     .slider-wrap {
       position: relative;
       width: 100%;
     }
 
     input[type="range"] {
-
       width: 100%;
       height: 6px;
-
       appearance: none;
       -webkit-appearance: none;
-
       border-radius: 999px;
-
-      background:
-        linear-gradient(
-          90deg,
-          rgba(124,58,237,0.9),
-          rgba(37,99,235,0.9)
-        );
-
+      background: linear-gradient(90deg, rgba(124, 58, 237, 0.92), rgba(37, 99, 235, 0.92));
       outline: none;
     }
 
     input[type="range"]::-webkit-slider-thumb {
-
       appearance: none;
       -webkit-appearance: none;
-
-      width: 26px;
-      height: 26px;
-
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
-
-      background:
-        rgba(255,255,255,0.95);
-
-      border:
-        2px solid rgba(255,255,255,0.2);
-
-      box-shadow:
-        0 0 0 6px rgba(255,255,255,0.08),
-        0 6px 24px rgba(255,255,255,0.18);
-
+      background: rgba(255, 255, 255, 0.96);
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(255, 255, 255, 0.14);
       cursor: pointer;
     }
 
     input[type="range"]::-moz-range-thumb {
-
-      width: 26px;
-      height: 26px;
-
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
-
-      background:
-        rgba(255,255,255,0.95);
-
-      border:
-        2px solid rgba(255,255,255,0.2);
-
+      background: rgba(255, 255, 255, 0.96);
+      border: 2px solid rgba(255, 255, 255, 0.18);
       cursor: pointer;
     }
 
-    /* ======================================================
+    input[type="range"]:focus-visible,
+    select:focus-visible,
+    button:focus-visible {
+      outline: 2px solid rgba(167, 139, 250, 0.6);
+      outline-offset: 3px;
+    }
+
+    /* =========================
        EXPERT RACK
-    ======================================================= */
-
+    ========================== */
     #expertRack {
-
-      flex: 1;
-
+      flex: 1 1 auto;
+      min-height: 0;
       width: 100%;
-
-      min-height: 120px;
-
-      padding:
-        18px 0 0;
-
+      padding: 18px 0 0;
       display: flex;
       flex-direction: column;
       gap: 16px;
-
       overflow-y: auto;
-
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
+      overscroll-behavior: contain;
     }
 
     #expertRack::-webkit-scrollbar {
       display: none;
     }
 
-    /* ======================================================
+    /* =========================
        BOTTOM DOCK
-    ======================================================= */
-
+    ========================== */
     .bottom-dock {
-
       position: fixed;
-
       left: 0;
       right: 0;
       bottom: 0;
-
       z-index: 40;
-
       padding:
         14px 16px
-        calc(
-          18px +
-          env(safe-area-inset-bottom)
-        );
-
+        calc(18px + env(safe-area-inset-bottom));
       background:
         linear-gradient(
           180deg,
-          rgba(3,3,3,0) 0%,
-          rgba(3,3,3,0.92) 35%,
-          rgba(3,3,3,0.98) 100%
+          rgba(3, 3, 3, 0) 0%,
+          rgba(3, 3, 3, 0.92) 35%,
+          rgba(3, 3, 3, 0.98) 100%
         );
-
-      backdrop-filter:
-        blur(22px);
-
-      -webkit-backdrop-filter:
-        blur(22px);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
     }
 
     #addLayerBtn {
-
       width: 100%;
-
       border: none;
       outline: none;
-
-      border-radius:
-        24px;
-
-      padding:
-        18px 22px;
-
-      background:
-        linear-gradient(
-          180deg,
-          rgba(255,255,255,0.12),
-          rgba(255,255,255,0.06)
-        );
-
-      border:
-        1px solid rgba(255,255,255,0.08);
-
-      color:
-        rgba(255,255,255,0.96);
-
-      font-size: 1.02rem;
-      font-weight: 700;
-
-      letter-spacing:
-        -0.02em;
-
-      backdrop-filter:
-        blur(24px);
-
-      -webkit-backdrop-filter:
-        blur(24px);
-
-      box-shadow:
-        0 14px 40px rgba(0,0,0,0.55);
-
-      transition:
-        transform 0.18s ease,
-        background 0.18s ease;
-
+      border-radius: 24px;
+      padding: 18px 22px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.97);
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.54);
+      transition: transform 0.18s ease, background 0.18s ease;
       cursor: pointer;
     }
 
     #addLayerBtn:active {
-
-      transform:
-        scale(0.985);
-
-      background:
-        linear-gradient(
-          180deg,
-          rgba(255,255,255,0.16),
-          rgba(255,255,255,0.08)
-        );
+      transform: scale(0.985);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
     }
 
-    /* ======================================================
+    /* =========================
        BOTTOM SHEET MODAL
-    ======================================================= */
-
+    ========================== */
     #layerModal {
-
       position: fixed;
       inset: 0;
-
       z-index: 80;
-
       display: flex;
       align-items: flex-end;
       justify-content: center;
-
-      background:
-        rgba(0,0,0,0.42);
-
+      background: rgba(0, 0, 0, 0.44);
       opacity: 0;
       pointer-events: none;
-
-      transition:
-        opacity 0.28s ease;
+      transition: opacity 0.28s ease;
     }
 
-    #layerModal.open {
-
+    #layerModal.open,
+    #layerModal.active {
       opacity: 1;
       pointer-events: auto;
     }
 
     .sheet {
-
       width: 100%;
-
-      padding:
-        14px 16px
-        calc(
-          28px +
-          env(safe-area-inset-bottom)
-        );
-
-      border-radius:
-        30px 30px 0 0;
-
-      transform:
-        translateY(100%);
-
-      transition:
-        transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-
+      max-width: var(--app-max);
+      padding: 14px 16px calc(28px + env(safe-area-inset-bottom));
+      border-radius: 30px 30px 0 0;
+      transform: translateY(100%);
+      transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
 
-    #layerModal.open .sheet {
-
-      transform:
-        translateY(0%);
+    #layerModal.open .sheet,
+    #layerModal.active .sheet {
+      transform: translateY(0%);
     }
 
     .sheet-handle {
-
       width: 46px;
       height: 5px;
-
       border-radius: 999px;
-
-      margin:
-        2px auto 14px;
-
-      background:
-        rgba(255,255,255,0.18);
+      margin: 2px auto 14px;
+      background: rgba(255, 255, 255, 0.18);
     }
 
     .sheet-title {
-
-      font-size: 1.1rem;
-      font-weight: 700;
-
-      letter-spacing:
-        -0.03em;
-
-      color:
-        rgba(255,255,255,0.94);
-
-      margin-bottom: 4px;
+      font-size: 1.08rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: rgba(255, 255, 255, 0.96);
+      margin-bottom: 2px;
     }
 
     .sheet-subtitle {
-
-      font-size: 0.9rem;
-      line-height: 1.45;
-
-      color:
-        rgba(255,255,255,0.48);
-
-      margin-bottom: 10px;
+      font-size: 0.92rem;
+      line-height: 1.48;
+      color: rgba(255, 255, 255, 0.52);
+      margin-bottom: 8px;
     }
 
     .sheet-btn {
-
       width: 100%;
-
       border: none;
       outline: none;
-
-      border-radius:
-        20px;
-
-      padding:
-        18px 18px;
-
-      background:
-        rgba(255,255,255,0.05);
-
-      border:
-        1px solid rgba(255,255,255,0.06);
-
-      color:
-        rgba(255,255,255,0.92);
-
+      border-radius: 20px;
+      padding: 18px 18px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.94);
       text-align: left;
-
       font-size: 1rem;
-      font-weight: 600;
-
-      letter-spacing:
-        -0.02em;
-
-      backdrop-filter:
-        blur(18px);
-
-      -webkit-backdrop-filter:
-        blur(18px);
-
-      transition:
-        transform 0.18s ease,
-        background 0.18s ease;
-
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
       cursor: pointer;
     }
 
     .sheet-btn:active {
-
-      transform:
-        scale(0.985);
-
-      background:
-        rgba(255,255,255,0.08);
+      transform: scale(0.985);
+      background: rgba(255, 255, 255, 0.09);
     }
 
     #injectCodeBtn {
-
-      color:
-        #c4b5fd;
-
-      border:
-        1px solid rgba(167,139,250,0.22);
-
-      background:
-        rgba(167,139,250,0.08);
+      color: #c4b5fd;
+      border: 1px solid rgba(167, 139, 250, 0.22);
+      background: rgba(167, 139, 250, 0.08);
     }
 
     #injectCodeBtn:active {
-
-      background:
-        rgba(167,139,250,0.14);
+      background: rgba(167, 139, 250, 0.14);
     }
 
-    /* ======================================================
-       RESPONSIVE POLISH
-    ======================================================= */
-
-    @media (min-width: 768px) {
+    /* =========================
+       MOBILE POLISH
+    ========================== */
+    @media (max-width: 480px) {
+      :root {
+        --dock-space: 110px;
+      }
 
       .app-shell {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
 
-        max-width: 560px;
-        margin: 0 auto;
+      #routerConsole {
+        padding: 18px 16px;
+        gap: 18px;
+        border-radius: 26px;
+      }
+
+      .hero {
+        padding-bottom: 18px;
+      }
+
+      .hero-title {
+        font-size: clamp(1.95rem, 8vw, 2.35rem);
       }
 
       .bottom-dock {
-        max-width: 560px;
-        margin: 0 auto;
+        padding-left: 12px;
+        padding-right: 12px;
       }
 
       .sheet {
-        max-width: 560px;
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .orb {
+        filter: blur(96px);
+        opacity: 0.42;
+      }
+
+      .glass,
+      .sheet,
+      .bottom-dock {
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
       }
     }
 
+    @media (min-width: 768px) {
+      body {
+        display: flex;
+        justify-content: center;
+      }
+
+      .app-shell,
+      .bottom-dock,
+      .sheet {
+        width: 100%;
+        max-width: var(--app-max);
+      }
+
+      .bottom-dock {
+        left: 50%;
+        transform: translateX(-50%);
+        right: auto;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .orb,
+      .sheet,
+      #layerModal,
+      #addLayerBtn,
+      .sheet-btn {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+
+    /* Prevent iOS input zoom weirdness */
+    @supports (-webkit-touch-callout: none) {
+      input,
+      select,
+      button {
+        font-size: 16px;
+      }
+    }
   </style>
-
-  <!-- ======================================================
-       ERUDA MOBILE DEBUGGING
-  ======================================================= -->
-
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-
-  <script>
-    eruda.init();
-  </script>
-
 </head>
 
 <body>
-
-  <!-- ======================================================
-       BACKGROUND ORBS
-  ======================================================= -->
-
   <div class="orb orb-violet"></div>
   <div class="orb orb-cobalt"></div>
 
-  <!-- ======================================================
-       APP SHELL
-  ======================================================= -->
-
   <main class="app-shell">
-
-    <!-- ====================================================
-         HEADER
-    ===================================================== -->
-
-    <header class="hero">
-
-      <h1 class="hero-title">
-        Symbiote Studio
-      </h1>
-
-      <p class="hero-subtitle">
-        MoE World Model
-      </p>
-
+    <header class="hero" aria-label="Project header">
+      <h1 class="hero-title">Symbiote Studio</h1>
+      <p class="hero-subtitle">MoE World Model</p>
     </header>
 
-    <!-- ====================================================
-         ROUTER CONSOLE
-    ===================================================== -->
-
-    <section
-      id="routerConsole"
-      class="glass"
-    >
-
+    <section id="routerConsole" class="glass" aria-label="Router console">
       <div class="console-header">
-
-        <div class="console-title">
-          Router Console
-        </div>
-
-        <div class="console-badge">
-          GLOBAL STATE
-        </div>
-
+        <div class="console-title">Router Console</div>
+        <div class="console-badge">GLOBAL STATE</div>
       </div>
 
-      <!-- Enclosure -->
-
       <div class="control-group">
-
         <div class="control-row">
-
-          <label
-            class="control-label"
-            for="enclosureSelect"
-          >
-            Enclosure
-          </label>
-
+          <label class="control-label" for="enclosureSelect">Enclosure</label>
         </div>
 
         <div class="select-shell">
-
-          <select id="enclosureSelect">
-
-            <option value="open">
-              Open
-            </option>
-
-            <option value="umbrella">
-              Umbrella
-            </option>
-
-            <option value="indoor">
-              Indoor
-            </option>
-
+          <select id="enclosureSelect" aria-label="Select enclosure mode">
+            <option value="open">Open</option>
+            <option value="umbrella">Umbrella</option>
+            <option value="indoor">Indoor</option>
           </select>
-
-          <div class="select-chevron"></div>
-
+          <div class="select-chevron" aria-hidden="true"></div>
         </div>
-
       </div>
 
-      <!-- Pressure -->
-
       <div class="control-group">
-
         <div class="control-row">
-
-          <label
-            class="control-label"
-            for="pressureSlider"
-          >
-            Atmospheric Pressure
-          </label>
-
-          <div
-            class="control-value"
-            id="pressureValue"
-          >
-            0.50
-          </div>
-
+          <label class="control-label" for="pressureSlider">Atmospheric Pressure</label>
+          <div class="control-value" id="pressureValue">0.50</div>
         </div>
 
         <div class="slider-wrap">
-
           <input
             id="pressureSlider"
             type="range"
@@ -995,94 +654,51 @@
             max="1"
             step="0.01"
             value="0.5"
+            aria-label="Atmospheric pressure"
           />
-
         </div>
-
       </div>
-
     </section>
 
-    <!-- ====================================================
-         EXPERT RACK
-    ===================================================== -->
-
-    <section id="expertRack"></section>
-
+    <section id="expertRack" aria-label="Active acoustic experts"></section>
   </main>
 
-  <!-- ======================================================
-       BOTTOM DOCK
-  ======================================================= -->
-
   <div class="bottom-dock">
-
-    <button id="addLayerBtn">
+    <button id="addLayerBtn" type="button">
       Add Acoustic Expert
     </button>
-
   </div>
 
-  <!-- ======================================================
-       BOTTOM SHEET MODAL
-  ======================================================= -->
-
-  <div id="layerModal">
-
-    <div class="sheet glass">
-
+  <div id="layerModal" aria-hidden="true">
+    <div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
       <div class="sheet-handle"></div>
 
-      <div class="sheet-title">
+      <div class="sheet-title" id="sheetTitle">
         Inject Acoustic Expert
       </div>
 
       <div class="sheet-subtitle">
-        Dynamically expand the MoE world
-        model with procedural atmosphere,
-        ecology, and behavioral modules.
+        Dynamically expand the MoE world model with procedural atmosphere, ecology, and behavioral modules.
       </div>
 
-      <button
-        class="sheet-btn"
-        data-expert="rain"
-      >
+      <button class="sheet-btn" data-expert="rain" type="button">
         Atmosphere · Rain
       </button>
 
-      <button
-        class="sheet-btn"
-        data-expert="wind"
-      >
+      <button class="sheet-btn" data-expert="wind" type="button">
         Atmosphere · Wind
       </button>
 
-      <button
-        class="sheet-btn"
-        data-expert="birds"
-      >
+      <button class="sheet-btn" data-expert="birds" type="button">
         Ecology · Birds
       </button>
 
-      <button
-        class="sheet-btn"
-        id="injectCodeBtn"
-      >
+      <button class="sheet-btn" id="injectCodeBtn" type="button">
         Custom · Paste Expert Code
       </button>
-
     </div>
-
   </div>
 
-  <!-- ======================================================
-       ENGINE ENTRY
-  ======================================================= -->
-
-  <script
-    type="module"
-    src="./app.js"
-  ></script>
-
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
