@@ -5,7 +5,7 @@
 import ArchitectRenderer
 from './architect_renderer.js';
 
-import scanProject
+import * as ScannerModule
 from './architect_scanner.js';
 
 import * as PromptBuilder
@@ -220,27 +220,84 @@ Audio crackling on Android."
 
     const scanner = {
 
-        async scan(options = {}) {
+    async scan(options = {}) {
 
+        try {
+
+            // DEFAULT EXPORT
             if (
-                typeof scanProject === 'function'
+                typeof ScannerModule.default ===
+                'function'
             ) {
 
-                return await scanProject(
-                    options
-                );
+                return await
+                    ScannerModule.default(
+                        options
+                    );
             }
 
+            // createArchitectScanner()
+            if (
+                typeof
+                ScannerModule
+                .createArchitectScanner ===
+                'function'
+            ) {
+
+                const scannerFactory =
+                    ScannerModule
+                    .createArchitectScanner();
+
+                if (
+                    scannerFactory &&
+                    typeof scannerFactory.scan ===
+                    'function'
+                ) {
+
+                    return await
+                        scannerFactory.scan(
+                            options
+                        );
+                }
+            }
+
+            // scanProject()
+            if (
+                typeof
+                ScannerModule.scanProject ===
+                'function'
+            ) {
+
+                return await
+                    ScannerModule.scanProject(
+                        options
+                    );
+            }
+
+            throw new Error(
+                'No valid scanner export found.'
+            );
+
+        } catch (err) {
+
+            console.error(err);
+
             return {
-                success: true,
-                warning:
-                    'Scanner unavailable.',
+
+                success: false,
+
+                error:
+                    err.message,
+
                 files: [],
+
                 console: [],
+
                 dom: {}
             };
         }
-    };
+    }
+};
 
     const runtime =
         new ArchitectRuntime({
