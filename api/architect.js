@@ -1,22 +1,18 @@
 // /api/architect.js
 // -----------------------------------------------------------------------------
 // Symbiote Studio — Architect AI API
-// Production Runtime Endpoint
+// Stable Runtime Endpoint (Vercel Safe)
 // -----------------------------------------------------------------------------
 
-import OpenAI
-from 'openai';
+import OpenAI from 'openai';
 
 // -----------------------------------------------------------------------------
-// CLIENT
+// OPENAI CLIENT
 // -----------------------------------------------------------------------------
 
-const client =
-    new OpenAI({
-
-        apiKey:
-            process.env.OPENAI_API_KEY
-    });
+const client = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
 // -----------------------------------------------------------------------------
 // CONFIG
@@ -24,10 +20,9 @@ const client =
 
 const MODEL =
     process.env.ARCHITECT_MODEL ||
-    'gpt-5-5';
+    'gpt-4.1-mini';
 
-const MAX_INPUT_CHARS =
-    120000;
+const MAX_INPUT_CHARS = 120000;
 
 // -----------------------------------------------------------------------------
 // SYSTEM PROMPT
@@ -40,28 +35,24 @@ You are an elite senior full-stack runtime engineer working on:
 
 "Symbiote Studio · MoE World Model"
 
-Your job:
-- analyze runtime issues
-- inspect scan data
+Your responsibilities:
+- inspect runtime failures
+- analyze browser/runtime scan data
 - identify root causes
-- generate production-safe fixes
-- generate structured repair patches
-- avoid placeholders
-- avoid pseudo-code
-- avoid vague explanations
+- generate production-safe code fixes
+- preserve runtime stability
+- preserve mobile-first architecture
+- preserve UI structure and design language
 
 IMPORTANT RULES:
 
 1. Return STRICT JSON ONLY.
-2. Do not wrap JSON in markdown.
-3. Never return prose outside JSON.
-4. Keep patches production-grade.
-5. Avoid destructive edits.
+2. Never wrap JSON in markdown.
+3. Never return explanations outside JSON.
+4. Keep patches production-safe.
+5. Avoid destructive rewrites.
 6. Prefer minimal safe modifications.
-7. Assume mobile-first runtime architecture.
-8. Preserve existing design language.
-9. Preserve runtime stability.
-10. If unsure, explain uncertainty safely.
+7. Never output pseudo-code.
 
 JSON FORMAT:
 
@@ -69,7 +60,7 @@ JSON FORMAT:
   "summary": "short summary",
   "analysis": "detailed analysis",
   "patch": "code patch",
-  "notes": "optional implementation notes"
+  "notes": "optional notes"
 }
 `;
 
@@ -77,11 +68,7 @@ JSON FORMAT:
 // HELPERS
 // -----------------------------------------------------------------------------
 
-function json(
-    res,
-    status,
-    payload
-) {
+function sendJSON(res, status, payload) {
 
     res.status(status);
 
@@ -98,28 +85,21 @@ function json(
 function sanitizeInput(input) {
 
     if (!input) {
-
         return '';
     }
 
     return String(input)
-        .slice(
-            0,
-            MAX_INPUT_CHARS
-        )
+        .slice(0, MAX_INPUT_CHARS)
         .trim();
 }
 
-function safeParse(content) {
+function safeParseJSON(content) {
 
     try {
 
         return {
-
             ok: true,
-
-            data:
-                JSON.parse(content)
+            data: JSON.parse(content)
         };
 
     } catch (err) {
@@ -130,63 +110,46 @@ function safeParse(content) {
         );
 
         return {
-
             ok: false,
-
-            error:
-                err.message
+            error: err.message
         };
     }
 }
 
 // -----------------------------------------------------------------------------
-// MAIN
+// MAIN HANDLER
 // -----------------------------------------------------------------------------
 
-export default async function handler(
-    req,
-    res
-) {
+export default async function handler(req, res) {
 
     // -------------------------------------------------------------------------
-    // METHOD
+    // METHOD CHECK
     // -------------------------------------------------------------------------
 
-    if (
-        req.method !==
-        'POST'
-    ) {
+    if (req.method !== 'POST') {
 
-        return json(
+        return sendJSON(
             res,
             405,
             {
-
                 ok: false,
-
-                error:
-                    'Method not allowed.'
+                error: 'Method not allowed.'
             }
         );
     }
 
     // -------------------------------------------------------------------------
-    // API KEY
+    // ENV CHECK
     // -------------------------------------------------------------------------
 
-    if (
-        !process.env.OPENAI_API_KEY
-    ) {
+    if (!process.env.OPENAI_API_KEY) {
 
-        return json(
+        return sendJSON(
             res,
             500,
             {
-
                 ok: false,
-
-                error:
-                    'OPENAI_API_KEY missing.'
+                error: 'OPENAI_API_KEY missing.'
             }
         );
     }
@@ -194,37 +157,31 @@ export default async function handler(
     try {
 
         // ---------------------------------------------------------------------
-        // INPUT
+        // BODY
         // ---------------------------------------------------------------------
 
-        const body =
-            req.body || {};
+        const body = req.body || {};
 
         const prompt =
-            sanitizeInput(
-                body.prompt
-            );
+            sanitizeInput(body.prompt);
 
         const scan =
             body.scan || {};
 
         if (!prompt) {
 
-            return json(
+            return sendJSON(
                 res,
                 400,
                 {
-
                     ok: false,
-
-                    error:
-                        'Prompt is required.'
+                    error: 'Prompt is required.'
                 }
             );
         }
 
         // ---------------------------------------------------------------------
-        // USER PAYLOAD
+        // PAYLOAD
         // ---------------------------------------------------------------------
 
         const runtimePayload = `
@@ -234,12 +191,8 @@ ${prompt}
 
 RUNTIME SCAN:
 
-${JSON.stringify(
-    scan,
-    null,
-    2
-)}
-        `;
+${JSON.stringify(scan, null, 2)}
+`;
 
         // ---------------------------------------------------------------------
         // OPENAI REQUEST
@@ -248,44 +201,33 @@ ${JSON.stringify(
         const completion =
             await client.chat.completions.create({
 
-                model:
-                    MODEL,
+                model: MODEL,
 
-                temperature:
-                    0.2,
+                temperature: 0.2,
 
-                max_tokens:
-                    2400,
+                max_tokens: 2400,
 
                 messages: [
 
                     {
-                        role:
-                            'system',
-
-                        content:
-                            SYSTEM_PROMPT
+                        role: 'system',
+                        content: SYSTEM_PROMPT
                     },
 
                     {
-                        role:
-                            'user',
-
-                        content:
-                            runtimePayload
+                        role: 'user',
+                        content: runtimePayload
                     }
                 ]
             });
 
         // ---------------------------------------------------------------------
-        // CONTENT
+        // RESPONSE CONTENT
         // ---------------------------------------------------------------------
 
         const content =
-            completion
-                ?.choices?.[0]
-                ?.message
-                ?.content;
+            completion?.choices?.[0]
+                ?.message?.content;
 
         if (!content) {
 
@@ -295,33 +237,27 @@ ${JSON.stringify(
         }
 
         // ---------------------------------------------------------------------
-        // PARSE
+        // JSON PARSE
         // ---------------------------------------------------------------------
 
         const parsed =
-            safeParse(
-                content
-            );
+            safeParseJSON(content);
 
         // ---------------------------------------------------------------------
-        // FALLBACK
+        // RAW FALLBACK
         // ---------------------------------------------------------------------
 
         if (!parsed.ok) {
 
             console.warn(
-                '[Architect API] Falling back to raw mode.'
+                '[Architect API] Non-JSON response fallback.'
             );
 
-            return json(
+            return sendJSON(
                 res,
                 200,
                 {
-
                     ok: true,
-
-                    raw:
-                        content,
 
                     summary:
                         'AI response generated.',
@@ -329,17 +265,19 @@ ${JSON.stringify(
                     analysis:
                         content,
 
-                    patch:
-                        '',
+                    patch: '',
 
                     notes:
-                        'Response was not strict JSON.'
+                        'Response was not strict JSON.',
+
+                    raw:
+                        content
                 }
             );
         }
 
         // ---------------------------------------------------------------------
-        // NORMALIZED
+        // NORMALIZED RESPONSE
         // ---------------------------------------------------------------------
 
         const normalized = {
@@ -348,30 +286,23 @@ ${JSON.stringify(
 
             summary:
                 parsed.data.summary ||
-
                 'Architect analysis complete.',
 
             analysis:
-                parsed.data.analysis ||
-
-                '',
+                parsed.data.analysis || '',
 
             patch:
-                parsed.data.patch ||
-
-                '',
+                parsed.data.patch || '',
 
             notes:
-                parsed.data.notes ||
-
-                ''
+                parsed.data.notes || ''
         };
 
         // ---------------------------------------------------------------------
-        // RESPONSE
+        // SUCCESS
         // ---------------------------------------------------------------------
 
-        return json(
+        return sendJSON(
             res,
             200,
             normalized
@@ -380,25 +311,21 @@ ${JSON.stringify(
     } catch (err) {
 
         console.error(
-            '[Architect API]',
+            '[Architect API ERROR]',
             err
         );
 
         // ---------------------------------------------------------------------
-        // OPENAI RATE LIMIT
+        // RATE LIMIT
         // ---------------------------------------------------------------------
 
-        if (
-            err?.status === 429
-        ) {
+        if (err?.status === 429) {
 
-            return json(
+            return sendJSON(
                 res,
                 429,
                 {
-
                     ok: false,
-
                     error:
                         'OpenAI rate limit exceeded.'
                 }
@@ -406,19 +333,36 @@ ${JSON.stringify(
         }
 
         // ---------------------------------------------------------------------
-        // GENERIC
+        // AUTH ERROR
         // ---------------------------------------------------------------------
 
-        return json(
+        if (
+            err?.status === 401
+        ) {
+
+            return sendJSON(
+                res,
+                401,
+                {
+                    ok: false,
+                    error:
+                        'Invalid OpenAI API key.'
+                }
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // GENERIC FAILURE
+        // ---------------------------------------------------------------------
+
+        return sendJSON(
             res,
             500,
             {
-
                 ok: false,
 
                 error:
-                    err.message ||
-
+                    err?.message ||
                     'Architect API failure.'
             }
         );
