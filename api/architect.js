@@ -129,7 +129,7 @@ If uncertain:
                 body: JSON.stringify({
 
                     model:
-                        'gpt-5.5',
+                        'gpt-4.1-mini',
 
                     temperature:
                         0.15,
