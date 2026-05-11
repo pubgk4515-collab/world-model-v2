@@ -1,14 +1,15 @@
 // /devtools/architect/architect_panel.js
 // -----------------------------------------------------------------------------
-// Symbiote Studio — Architect Console Panel
-// Bulletproof Runtime Edition
+// Symbiote Studio — Architect Dock
+// Premium Floating AI Workspace
+// Production Runtime Edition
 // -----------------------------------------------------------------------------
-
-import ArchitectRenderer
-from './architect_renderer.js';
 
 import ArchitectRuntime
 from './architect_runtime.js';
+
+import ArchitectRenderer
+from './architect_renderer.js';
 
 import * as ScannerModule
 from './architect_scanner.js';
@@ -26,16 +27,17 @@ export function createArchitectPanel() {
     // SINGLETON
     // -------------------------------------------------------------------------
 
-    if (window.__architectPanelMounted) {
+    if (window.__architectDockMounted) {
 
         console.warn(
-            '[Architect] Panel already mounted.'
+            '[ArchitectDock] Already mounted.'
         );
 
-        return window.__architectPanelAPI;
+        return window.__architectDockAPI;
     }
 
-    window.__architectPanelMounted = true;
+    window.__architectDockMounted =
+        true;
 
     // -------------------------------------------------------------------------
     // ROOT
@@ -48,101 +50,185 @@ export function createArchitectPanel() {
         'architect-console-root';
 
     // -------------------------------------------------------------------------
-    // HTML
+    // TEMPLATE
     // -------------------------------------------------------------------------
 
     root.innerHTML = `
-        <div
-            id="architect-panel"
-            class="architect-shell"
+        <section
+            id="architectDock"
+            class="architect-dock"
         >
 
-            <!-- HEADER -->
-            <div class="architect-header">
+            <!-- ========================================================== -->
+            <!-- TOPBAR -->
+            <!-- ========================================================== -->
 
-                <div class="architect-header-left">
+            <header class="architect-topbar">
 
-                    <div class="architect-dot"></div>
+                <div class="architect-brand">
 
-                    <div>
+                    <div class="architect-brand-orb"></div>
 
-                        <div class="architect-title">
-                            Architect Console
+                    <div class="architect-brand-copy">
+
+                        <div class="architect-brand-title">
+                            Architect AI
                         </div>
 
-                        <div class="architect-subtitle">
-                            Runtime AI Project Surgeon
+                        <div class="architect-brand-subtitle">
+                            Runtime Development Workspace
                         </div>
 
                     </div>
 
                 </div>
 
-                <button
-                    id="architectCloseBtn"
-                    class="architect-close"
-                    type="button"
-                    aria-label="Close Architect"
-                >
-                    ✕
-                </button>
+                <div class="architect-topbar-actions">
 
-            </div>
+                    <button
+                        id="architectMinimizeBtn"
+                        class="architect-icon-btn"
+                        type="button"
+                        aria-label="Minimize"
+                    >
+                        —
+                    </button>
 
+                    <button
+                        id="architectCloseBtn"
+                        class="architect-icon-btn"
+                        type="button"
+                        aria-label="Close"
+                    >
+                        ✕
+                    </button>
+
+                </div>
+
+            </header>
+
+            <!-- ========================================================== -->
             <!-- STATUS -->
-            <div class="architect-status">
+            <!-- ========================================================== -->
 
-                <div class="architect-status-pill">
-                    PROJECT LINKED
+            <section class="architect-runtime-strip">
+
+                <div class="architect-runtime-pill">
+                    CONNECTED
                 </div>
 
-                <div class="architect-status-text">
-                    VS Code bridge active
+                <div class="architect-runtime-meta">
+
+                    <div class="architect-runtime-dot"></div>
+
+                    <span>
+                        OpenAI Runtime Active
+                    </span>
+
                 </div>
 
-            </div>
+            </section>
 
-            <!-- INPUT -->
-            <div class="architect-input-wrap">
+            <!-- ========================================================== -->
+            <!-- NAVIGATION -->
+            <!-- ========================================================== -->
 
-                <textarea
-                    id="architectPrompt"
-                    class="architect-textarea"
-                    placeholder="Describe the issue...
-
-Example:
-Wind slider not updating intensity.
-Remove button broken.
-Audio crackling on Android."
-                ></textarea>
-
-            </div>
-
-            <!-- ACTIONS -->
-            <div class="architect-actions">
+            <nav class="architect-tabs">
 
                 <button
-                    id="architectScanBtn"
-                    class="architect-btn architect-btn-secondary"
+                    class="architect-tab active"
+                    data-tab="workspace"
                     type="button"
                 >
-                    Scan Project
+                    Workspace
                 </button>
 
                 <button
-                    id="architectFixBtn"
-                    class="architect-btn architect-btn-primary"
+                    class="architect-tab"
+                    data-tab="scan"
                     type="button"
                 >
-                    Generate Fix
+                    Scan
                 </button>
 
-            </div>
+                <button
+                    class="architect-tab"
+                    data-tab="logs"
+                    type="button"
+                >
+                    Logs
+                </button>
 
-            <!-- FLAGS -->
-            <div class="architect-flags">
+                <button
+                    class="architect-tab"
+                    data-tab="patches"
+                    type="button"
+                >
+                    Patches
+                </button>
 
-                <label class="architect-flag">
+            </nav>
+
+            <!-- ========================================================== -->
+            <!-- WORKSPACE -->
+            <!-- ========================================================== -->
+
+            <main
+                id="architectWorkspace"
+                class="architect-workspace"
+            >
+
+                <div class="architect-welcome">
+
+                    <div class="architect-welcome-badge">
+                        ARCHITECT ONLINE
+                    </div>
+
+                    <h2 class="architect-welcome-title">
+                        Symbiote Development Runtime
+                    </h2>
+
+                    <p class="architect-welcome-text">
+                        Scan project state, inspect runtime logs,
+                        generate AI patches, and apply fixes safely.
+                    </p>
+
+                </div>
+
+                <!-- LIVE OUTPUT -->
+
+                <div
+                    id="architectResult"
+                    class="architect-result"
+                >
+
+                    <div class="architect-placeholder">
+
+                        <div class="architect-placeholder-icon">
+                            ◉
+                        </div>
+
+                        <div class="architect-placeholder-title">
+                            Architect Ready
+                        </div>
+
+                        <div class="architect-placeholder-text">
+                            Waiting for runtime instructions...
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </main>
+
+            <!-- ========================================================== -->
+            <!-- CONTROLS -->
+            <!-- ========================================================== -->
+
+            <section class="architect-controls">
+
+                <label class="architect-toggle">
 
                     <input
                         type="checkbox"
@@ -150,11 +236,13 @@ Audio crackling on Android."
                         checked
                     />
 
-                    Include DOM
+                    <span>
+                        Include DOM
+                    </span>
 
                 </label>
 
-                <label class="architect-flag">
+                <label class="architect-toggle">
 
                     <input
                         type="checkbox"
@@ -162,11 +250,13 @@ Audio crackling on Android."
                         checked
                     />
 
-                    Include Console
+                    <span>
+                        Include Console
+                    </span>
 
                 </label>
 
-                <label class="architect-flag">
+                <label class="architect-toggle">
 
                     <input
                         type="checkbox"
@@ -174,25 +264,55 @@ Audio crackling on Android."
                         checked
                     />
 
-                    Include Audio
+                    <span>
+                        Include Audio
+                    </span>
 
                 </label>
 
-            </div>
+            </section>
 
-            <!-- RESULT -->
-            <div
-                id="architectResult"
-                class="architect-result"
-            >
+            <!-- ========================================================== -->
+            <!-- COMPOSER -->
+            <!-- ========================================================== -->
 
-                <div class="architect-placeholder">
-                    Waiting for analysis...
+            <footer class="architect-composer">
+
+                <textarea
+                    id="architectPrompt"
+                    class="architect-composer-input"
+                    placeholder="Describe the issue...
+
+Examples:
+• Wind slider not updating
+• Audio crackling on Android
+• Remove button broken
+• UI not responsive on mobile"
+                ></textarea>
+
+                <div class="architect-composer-actions">
+
+                    <button
+                        id="architectScanBtn"
+                        class="architect-secondary-btn"
+                        type="button"
+                    >
+                        Scan Runtime
+                    </button>
+
+                    <button
+                        id="architectFixBtn"
+                        class="architect-primary-btn"
+                        type="button"
+                    >
+                        Generate Patch
+                    </button>
+
                 </div>
 
-            </div>
+            </footer>
 
-        </div>
+        </section>
     `;
 
     // -------------------------------------------------------------------------
@@ -202,38 +322,27 @@ Audio crackling on Android."
     document.body.appendChild(root);
 
     // -------------------------------------------------------------------------
-    // PANEL ROOT
-    // -------------------------------------------------------------------------
-
-    const panelRoot =
-        root.querySelector(
-            '#architect-panel'
-        );
-
-    if (!panelRoot) {
-
-        throw new Error(
-            '[Architect] Panel root missing.'
-        );
-    }
-
-    console.log(
-        'ARCHITECT ROOT:',
-        panelRoot
-    );
-
-    // -------------------------------------------------------------------------
     // DOM
     // -------------------------------------------------------------------------
 
-    const promptEl =
+    const dock =
         root.querySelector(
-            '#architectPrompt'
+            '#architectDock'
+        );
+
+    const workspace =
+        root.querySelector(
+            '#architectWorkspace'
         );
 
     const resultEl =
         root.querySelector(
             '#architectResult'
+        );
+
+    const promptEl =
+        root.querySelector(
+            '#architectPrompt'
         );
 
     const scanBtn =
@@ -251,6 +360,11 @@ Audio crackling on Android."
             '#architectCloseBtn'
         );
 
+    const minimizeBtn =
+        root.querySelector(
+            '#architectMinimizeBtn'
+        );
+
     const includeDOM =
         root.querySelector(
             '#architectIncludeDOM'
@@ -266,56 +380,44 @@ Audio crackling on Android."
             '#architectIncludeAudio'
         );
 
+    const tabs =
+        Array.from(
+            root.querySelectorAll(
+                '.architect-tab'
+            )
+        );
+
     // -------------------------------------------------------------------------
-    // DOM VALIDATION
+    // VALIDATION
     // -------------------------------------------------------------------------
 
-    const requiredElements = {
+    const required = {
 
-        promptEl,
+        dock,
+        workspace,
         resultEl,
+        promptEl,
         scanBtn,
         fixBtn,
         closeBtn,
-        includeDOM,
-        includeConsole,
-        includeAudio
+        minimizeBtn
     };
 
     for (
         const [key, value]
-        of Object.entries(requiredElements)
+        of Object.entries(required)
     ) {
 
         if (!value) {
 
             throw new Error(
-                `[Architect] Missing DOM element: ${key}`
+                `[ArchitectDock] Missing element: ${key}`
             );
         }
     }
 
     // -------------------------------------------------------------------------
-    // DEBUG
-    // -------------------------------------------------------------------------
-
-    console.log({
-
-        promptEl,
-        resultEl,
-        scanBtn,
-        fixBtn,
-        closeBtn,
-        includeDOM,
-        includeConsole,
-        includeAudio
-    });
-
-    // -------------------------------------------------------------------------
     // RENDERER
-    // IMPORTANT:
-    // Renderer ONLY controls result area.
-    // NEVER pass panelRoot here.
     // -------------------------------------------------------------------------
 
     const renderer =
@@ -325,9 +427,6 @@ Audio crackling on Android."
 
     // -------------------------------------------------------------------------
     // RUNTIME
-    // IMPORTANT:
-    // Runtime renderer target MUST be resultEl.
-    // Otherwise renderer nukes full panel UI.
     // -------------------------------------------------------------------------
 
     const runtime =
@@ -350,8 +449,8 @@ Audio crackling on Android."
         });
 
     // -------------------------------------------------------------------------
-    // SCANNER WRAPPER
-    // -----------------------------------------------------------------------------
+    // SCANNER
+    // -------------------------------------------------------------------------
 
     const scanner = {
 
@@ -362,7 +461,8 @@ Audio crackling on Android."
                 // DEFAULT EXPORT
 
                 if (
-                    typeof ScannerModule.default ===
+                    typeof
+                    ScannerModule.default ===
                     'function'
                 ) {
 
@@ -372,7 +472,7 @@ Audio crackling on Android."
                         );
                 }
 
-                // FACTORY EXPORT
+                // FACTORY
 
                 if (
                     typeof
@@ -398,7 +498,7 @@ Audio crackling on Android."
                     }
                 }
 
-                // NAMED EXPORT
+                // scanProject()
 
                 if (
                     typeof
@@ -413,13 +513,13 @@ Audio crackling on Android."
                 }
 
                 throw new Error(
-                    'No compatible scanner export found.'
+                    'No scanner implementation found.'
                 );
 
             } catch (err) {
 
                 console.error(
-                    '[Architect Scanner Error]',
+                    '[ArchitectDock Scanner]',
                     err
                 );
 
@@ -477,18 +577,18 @@ Audio crackling on Android."
             } catch (err) {
 
                 console.error(
-                    '[Prompt Builder Error]',
+                    '[ArchitectDock Prompt]',
                     err
                 );
             }
 
             return `
-ARCHITECT ANALYSIS REQUEST
+ARCHITECT AI ANALYSIS
 
 USER ISSUE:
 ${payload.userPrompt || ''}
 
-SCAN DATA:
+SCAN:
 ${JSON.stringify(
     payload.scan || {},
     null,
@@ -505,6 +605,9 @@ ${JSON.stringify(
     let latestScan =
         null;
 
+    let isMinimized =
+        false;
+
     // -------------------------------------------------------------------------
     // SCAN
     // -------------------------------------------------------------------------
@@ -518,20 +621,20 @@ ${JSON.stringify(
 
             renderer.renderLoading(
                 resultEl,
-                'Scanning project runtime...'
+                'Scanning runtime workspace...'
             );
 
             latestScan =
                 await scanner.scan({
 
                     includeDOM:
-                        includeDOM.checked,
+                        includeDOM?.checked ?? true,
 
                     includeConsole:
-                        includeConsole.checked,
+                        includeConsole?.checked ?? true,
 
                     includeAudio:
-                        includeAudio.checked
+                        includeAudio?.checked ?? true
                 });
 
             renderer.renderScanResult(
@@ -546,7 +649,7 @@ ${JSON.stringify(
             renderer.renderError(
                 resultEl,
                 err.message ||
-                'Project scan failed.'
+                'Runtime scan failed.'
             );
 
         } finally {
@@ -557,7 +660,7 @@ ${JSON.stringify(
     }
 
     // -------------------------------------------------------------------------
-    // FIX
+    // GENERATE
     // -------------------------------------------------------------------------
 
     async function handleFix() {
@@ -565,13 +668,13 @@ ${JSON.stringify(
         try {
 
             const userPrompt =
-                promptEl.value.trim();
+                promptEl?.value?.trim();
 
             if (!userPrompt) {
 
                 renderer.renderError(
                     resultEl,
-                    'Describe the issue first.'
+                    'Describe an issue first.'
                 );
 
                 return;
@@ -582,12 +685,10 @@ ${JSON.stringify(
 
             renderer.renderLoading(
                 resultEl,
-                'Generating AI repair plan...'
+                'Generating AI repair patch...'
             );
 
-            // -----------------------------------------------------------------
             // AUTO SCAN
-            // -----------------------------------------------------------------
 
             if (!latestScan) {
 
@@ -595,40 +696,33 @@ ${JSON.stringify(
                     await scanner.scan({
 
                         includeDOM:
-                            includeDOM.checked,
+                            includeDOM?.checked ?? true,
 
                         includeConsole:
-                            includeConsole.checked,
+                            includeConsole?.checked ?? true,
 
                         includeAudio:
-                            includeAudio.checked
+                            includeAudio?.checked ?? true
                     });
             }
 
-            // -----------------------------------------------------------------
-            // BUILD PROMPT
-            // -----------------------------------------------------------------
+            // PROMPT
 
             const finalPrompt =
                 promptBuilder.build({
 
                     userPrompt,
-                    scan: latestScan
+                    scan:
+                        latestScan
                 });
 
-            // -----------------------------------------------------------------
-            // AI CALL
-            // -----------------------------------------------------------------
+            // AI
 
             const response =
                 await runtime.askArchitect(
                     finalPrompt,
                     latestScan
                 );
-
-            // -----------------------------------------------------------------
-            // RENDER
-            // -----------------------------------------------------------------
 
             renderer.renderResponse(
                 resultEl,
@@ -642,7 +736,7 @@ ${JSON.stringify(
             renderer.renderError(
                 resultEl,
                 err.message ||
-                'Fix generation failed.'
+                'Patch generation failed.'
             );
 
         } finally {
@@ -650,6 +744,21 @@ ${JSON.stringify(
             fixBtn.disabled =
                 false;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // MINIMIZE
+    // -------------------------------------------------------------------------
+
+    function toggleMinimize() {
+
+        isMinimized =
+            !isMinimized;
+
+        dock.classList.toggle(
+            'architect-minimized',
+            isMinimized
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -672,15 +781,15 @@ ${JSON.stringify(
             console.error(err);
         }
 
-        window.__architectPanelMounted =
+        window.__architectDockMounted =
             false;
 
-        window.__architectPanelAPI =
+        window.__architectDockAPI =
             null;
     }
 
     // -------------------------------------------------------------------------
-    // ESC
+    // ESCAPE
     // -------------------------------------------------------------------------
 
     function handleEscape(event) {
@@ -691,6 +800,27 @@ ${JSON.stringify(
 
             destroyPanel();
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // TABS
+    // -------------------------------------------------------------------------
+
+    function handleTabClick(event) {
+
+        const current =
+            event.currentTarget;
+
+        tabs.forEach(tab => {
+
+            tab.classList.remove(
+                'active'
+            );
+        });
+
+        current.classList.add(
+            'active'
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -712,6 +842,19 @@ ${JSON.stringify(
         destroyPanel
     );
 
+    minimizeBtn.addEventListener(
+        'click',
+        toggleMinimize
+    );
+
+    tabs.forEach(tab => {
+
+        tab.addEventListener(
+            'click',
+            handleTabClick
+        );
+    });
+
     window.addEventListener(
         'keydown',
         handleEscape
@@ -725,13 +868,18 @@ ${JSON.stringify(
 
         open() {
 
-            root.style.display =
-                'block';
+            dock.style.display =
+                'flex';
         },
 
         close() {
 
             destroyPanel();
+        },
+
+        minimize() {
+
+            toggleMinimize();
         },
 
         scan() {
@@ -749,11 +897,11 @@ ${JSON.stringify(
     // GLOBAL
     // -------------------------------------------------------------------------
 
-    window.__architectPanelAPI =
+    window.__architectDockAPI =
         api;
 
     console.log(
-        '🧠 Architect Console mounted successfully.'
+        '🧠 Architect Dock mounted.'
     );
 
     return api;
