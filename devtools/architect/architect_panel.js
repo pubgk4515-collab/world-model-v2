@@ -351,7 +351,7 @@ Audio crackling on Android."
 
     // -------------------------------------------------------------------------
     // SCANNER WRAPPER
-    // -----------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     const scanner = {
 
@@ -359,21 +359,7 @@ Audio crackling on Android."
 
             try {
 
-                // DEFAULT EXPORT
-
-                if (
-                    typeof ScannerModule.default ===
-                    'function'
-                ) {
-
-                    return await
-                        ScannerModule.default(
-                            options
-                        );
-                }
-
-                // FACTORY EXPORT
-
+                // Use factory export (only valid pattern)
                 if (
                     typeof
                     ScannerModule
@@ -398,22 +384,8 @@ Audio crackling on Android."
                     }
                 }
 
-                // NAMED EXPORT
-
-                if (
-                    typeof
-                    ScannerModule.scanProject ===
-                    'function'
-                ) {
-
-                    return await
-                        ScannerModule.scanProject(
-                            options
-                        );
-                }
-
                 throw new Error(
-                    'No compatible scanner export found.'
+                    'Scanner not properly initialized.'
                 );
 
             } catch (err) {
@@ -452,26 +424,25 @@ Audio crackling on Android."
 
                 if (
                     typeof
-                    PromptBuilder.build ===
-                    'function'
-                ) {
-
-                    return PromptBuilder.build(
-                        payload
-                    );
-                }
-
-                if (
-                    typeof
                     PromptBuilder
-                    .buildArchitectPrompt ===
+                    .createPromptBuilder ===
                     'function'
                 ) {
 
-                    return PromptBuilder
-                        .buildArchitectPrompt(
+                    const instance =
+                        PromptBuilder
+                        .createPromptBuilder();
+
+                    if (
+                        instance &&
+                        typeof instance.build ===
+                        'function'
+                    ) {
+
+                        return instance.build(
                             payload
                         );
+                    }
                 }
 
             } catch (err) {

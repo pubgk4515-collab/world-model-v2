@@ -27,6 +27,7 @@ export default class ArchitectRenderer {
         if (!result) {
 
             return this.renderError(
+                this.root,
                 'Empty patch result.'
             );
         }
@@ -34,6 +35,7 @@ export default class ArchitectRenderer {
         if (!result.ok) {
 
             return this.renderError(
+                this.root,
                 result.error ||
                 'Unknown patch error.'
             );
@@ -437,10 +439,268 @@ export default class ArchitectRenderer {
     }
 
     // -------------------------------------------------------------------------
+    // SCAN RESULT
+    // -------------------------------------------------------------------------
+
+    renderScanResult(element, scan) {
+
+        if (!scan) {
+
+            return this.renderError(
+                element,
+                'Empty scan result.'
+            );
+        }
+
+        const runtime =
+            scan.runtime || {};
+
+        const dom =
+            scan.dom || {};
+
+        const audio =
+            scan.audio || {};
+
+        const errors =
+            Array.isArray(scan.errors)
+                ? scan.errors
+                : [];
+
+        const warnings =
+            Array.isArray(scan.warnings)
+                ? scan.warnings
+                : [];
+
+        const experts =
+            Array.isArray(scan.experts)
+                ? scan.experts
+                : [];
+
+        this.root.innerHTML = `
+            <div class="
+                architect-scan-result
+            ">
+
+                <div class="
+                    architect-result-title
+                ">
+                    🔍 Runtime Scan Complete
+                </div>
+
+                <div class="
+                    architect-result-section
+                ">
+
+                    <div class="
+                        architect-result-label
+                    ">
+                        Runtime Environment
+                    </div>
+
+                    <div class="
+                        architect-result-detail
+                    ">
+                        URL: ${this.escape(
+                            runtime.url || 'Unknown'
+                        )}<br/>
+                        Platform: ${this.escape(
+                            runtime.platform || 'Unknown'
+                        )}<br/>
+                        Viewport: ${runtime.viewportWidth}×${runtime.viewportHeight}
+                    </div>
+                </div>
+
+                <div class="
+                    architect-result-section
+                ">
+
+                    <div class="
+                        architect-result-label
+                    ">
+                        DOM State
+                    </div>
+
+                    <div class="
+                        architect-result-detail
+                    ">
+                        Expert Cards: ${dom.expertCards || 0}<br/>
+                        Buttons: ${dom.buttons || 0}<br/>
+                        Sliders: ${dom.rangeSliders || 0}
+                    </div>
+                </div>
+
+                <div class="
+                    architect-result-section
+                ">
+
+                    <div class="
+                        architect-result-label
+                    ">
+                        Audio State
+                    </div>
+
+                    <div class="
+                        architect-result-detail
+                    ">
+                        Supported: ${audio.supported ? 'Yes' : 'No'}<br/>
+                        State: ${this.escape(
+                            audio.state || 'Unknown'
+                        )}<br/>
+                        Sample Rate: ${audio.sampleRate || 'N/A'} Hz
+                    </div>
+                </div>
+
+                <div class="
+                    architect-result-section
+                ">
+
+                    <div class="
+                        architect-result-label
+                    ">
+                        Active Experts
+                    </div>
+
+                    <div class="
+                        architect-result-detail
+                    ">
+                        ${experts.length > 0
+                            ? experts.map((e) => `
+                                ${this.escape(e.type || 'Unknown')}
+                                (${this.escape(e.id || 'N/A')})<br/>
+                            `).join('')
+                            : 'No experts mounted'
+                        }
+                    </div>
+                </div>
+
+                ${warnings.length > 0 ? `
+                    <div class="
+                        architect-result-section
+                        architect-warning
+                    ">
+                        <div class="
+                            architect-result-label
+                        ">
+                            ⚠️ Warnings (${warnings.length})
+                        </div>
+                        <div class="
+                            architect-result-detail
+                        ">
+                            ${warnings.map((w) => `
+                                ${this.escape(
+                                    w.message || JSON.stringify(w)
+                                )}<br/>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${errors.length > 0 ? `
+                    <div class="
+                        architect-result-section
+                        architect-error-section
+                    ">
+                        <div class="
+                            architect-result-label
+                        ">
+                            ❌ Errors (${errors.length})
+                        </div>
+                        <div class="
+                            architect-result-detail
+                        ">
+                            ${errors.map((e) => `
+                                ${this.escape(
+                                    e.message || JSON.stringify(e)
+                                )}<br/>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------------------------
+
+    renderResponse(element, response) {
+
+        if (!response) {
+
+            return this.renderError(
+                element,
+                'Empty AI response.'
+            );
+        }
+
+        const raw =
+            response.raw || '';
+
+        const usage =
+            response.usage || {};
+
+        this.root.innerHTML = `
+            <div class="
+                architect-response
+            ">
+
+                <div class="
+                    architect-result-title
+                ">
+                    🤖 Architect Analysis
+                </div>
+
+                <div class="
+                    architect-result-section
+                ">
+
+                    <div class="
+                        architect-result-label
+                    ">
+                        AI Response
+                    </div>
+
+                    <div class="
+                        architect-result-detail
+                        architect-response-text
+                    ">
+                        ${this.escape(raw)}
+                    </div>
+                </div>
+
+                ${usage.prompt_tokens ? `
+                    <div class="
+                        architect-result-section
+                    ">
+
+                        <div class="
+                            architect-result-label
+                        ">
+                            Token Usage
+                        </div>
+
+                        <div class="
+                            architect-result-detail
+                        ">
+                            Prompt: ${usage.prompt_tokens}<br/>
+                            Completion: ${usage.completion_tokens || 0}<br/>
+                            Total: ${usage.total_tokens || 0}
+                        </div>
+                    </div>
+                ` : ''}
+
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
     // LOADING
     // -------------------------------------------------------------------------
 
     renderLoading(
+        element,
         message = 'Scanning runtime...'
     ) {
 
@@ -467,7 +727,7 @@ export default class ArchitectRenderer {
     // ERROR
     // -------------------------------------------------------------------------
 
-    renderError(message) {
+    renderError(element, message) {
 
         this.root.innerHTML = `
             <div class="

@@ -222,49 +222,35 @@ export function createArchitectScanner() {
 
     function scanAudio() {
 
-        const ctx =
-            window.__symbioteStudio?.ctx;
-
-        if (!ctx) {
-
-            return {
-
-                supported:
-                    !!window.AudioContext,
-
-                active:
-                    false,
-
-                state:
-                    'missing'
-            };
-        }
+        const supported =
+            !!(
+                window.AudioContext ||
+                window.webkitAudioContext
+            );
 
         return {
 
-            supported:
-                !!window.AudioContext,
+            supported,
 
             active:
-                true,
+                supported,
 
             state:
-                ctx.state,
+                supported ? 'ready' : 'missing',
 
             sampleRate:
-                ctx.sampleRate,
+                'N/A',
 
             currentTime:
-                ctx.currentTime,
+                'N/A',
 
             baseLatency:
-                ctx.baseLatency,
+                'N/A',
 
             outputLatency:
-                ctx.outputLatency,
+                'N/A',
 
-            destinationChannels:
-                ctx.destination?.maxChannelCount || 2
+            destinationChannels: 2
         };
     }
 
@@ -274,16 +260,19 @@ export function createArchitectScanner() {
 
     function scanExperts() {
 
-        const studio =
-            window.__symbioteStudio;
+        const experts =
+            window.__activeExperts;
 
-        if (!studio?.experts) {
+        if (
+            !experts ||
+            !(experts instanceof Map)
+        ) {
             return [];
         }
 
-        const experts = [];
+        const expertList = [];
 
-        studio.experts.forEach((expert, key) => {
+        experts.forEach((expert, key) => {
 
             const item = {
 
@@ -349,10 +338,10 @@ export function createArchitectScanner() {
 
             } catch {}
 
-            experts.push(item);
+            expertList.push(item);
         });
 
-        return experts;
+        return expertList;
     }
 
     // =====================================================

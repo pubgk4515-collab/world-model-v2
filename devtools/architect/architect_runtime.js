@@ -104,6 +104,62 @@ export default class ArchitectRuntime {
         }
 
         // ---------------------------------------------------------------------
+        // SCANNER
+        // ---------------------------------------------------------------------
+
+        this.scanner = null;
+
+        try {
+
+            if (
+                typeof
+                ScannerModule
+                .createArchitectScanner ===
+                'function'
+            ) {
+
+                this.scanner =
+                    ScannerModule
+                    .createArchitectScanner();
+            }
+
+        } catch (err) {
+
+            console.error(
+                '[ArchitectRuntime] Scanner init failed:',
+                err
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // PROMPT BUILDER
+        // ---------------------------------------------------------------------
+
+        this.promptBuilder = null;
+
+        try {
+
+            if (
+                typeof
+                PromptBuilder
+                .createPromptBuilder ===
+                'function'
+            ) {
+
+                this.promptBuilder =
+                    PromptBuilder
+                    .createPromptBuilder();
+            }
+
+        } catch (err) {
+
+            console.error(
+                '[ArchitectRuntime] Prompt builder init failed:',
+                err
+            );
+        }
+
+        // ---------------------------------------------------------------------
         // STATE
         // ---------------------------------------------------------------------
 
@@ -283,33 +339,7 @@ export default class ArchitectRuntime {
 
         try {
 
-            // DEFAULT EXPORT
-            if (
-                typeof
-                ScannerModule.default ===
-                'function'
-            ) {
-
-                return await
-                    ScannerModule.default(
-                        options
-                    );
-            }
-
-            // scanProject()
-            if (
-                typeof
-                ScannerModule.scanProject ===
-                'function'
-            ) {
-
-                return await
-                    ScannerModule.scanProject(
-                        options
-                    );
-            }
-
-            // createArchitectScanner()
+            // Use factory export (only valid pattern)
             if (
                 typeof
                 ScannerModule
@@ -335,7 +365,7 @@ export default class ArchitectRuntime {
             }
 
             throw new Error(
-                'No valid scanner export found.'
+                'Scanner not properly initialized.'
             );
 
         } catch (err) {
