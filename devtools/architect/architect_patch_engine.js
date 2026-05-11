@@ -1,210 +1,461 @@
-// devtools/architect/architect_patch_engine.js
-// ------------------------------------------------------------
-// Symbiote Studio — Architect Patch Engine v1
-// Phase 1: Structured Patch Intelligence
-// ------------------------------------------------------------
+// /devtools/architect/architect_patch_engine.js
+// -----------------------------------------------------------------------------
+// Symbiote Studio — Architect Patch Engine
+// Structured AI Patch Parser + Validator
+// -----------------------------------------------------------------------------
 
 export default class ArchitectPatchEngine {
-    constructor() {
-        this.lastPatch = null;
+
+    // -------------------------------------------------------------------------
+    // CONSTRUCTOR
+    // -------------------------------------------------------------------------
+
+    constructor(config = {}) {
+
+        this.maxPatchSize =
+            config.maxPatchSize ||
+            500000;
+
+        this.allowedExtensions =
+            config.allowedExtensions || [
+
+                '.js',
+                '.ts',
+                '.jsx',
+                '.tsx',
+                '.css',
+                '.scss',
+                '.html',
+                '.json',
+                '.md'
+            ];
+
+        this.lastPatch =
+            null;
+
+        console.log(
+            '🧠 ArchitectPatchEngine ready.'
+        );
     }
 
-    // --------------------------------------------------------
-    // PUBLIC
-    // --------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // PARSE
+    // -------------------------------------------------------------------------
 
-    parse(rawResponse) {
+    parse(rawInput = '') {
+
         try {
-            if (!rawResponse || typeof rawResponse !== 'string') {
-                throw new Error('Patch response is empty.');
+
+            const raw =
+                String(rawInput || '')
+                    .trim();
+
+            // -------------------------------------------------------------
+            // EMPTY
+            // -------------------------------------------------------------
+
+            if (!raw) {
+
+                return {
+
+                    ok: false,
+
+                    error:
+                        'Patch payload is empty.'
+                };
             }
 
-            const cleaned = this.extractJSON(rawResponse);
+            // -------------------------------------------------------------
+            // SIZE LIMIT
+            // -------------------------------------------------------------
 
-            const parsed = JSON.parse(cleaned);
+            if (
+                raw.length >
+                this.maxPatchSize
+            ) {
 
-            this.validate(parsed);
+                return {
 
-            this.lastPatch = parsed;
+                    ok: false,
+
+                    error:
+                        'Patch exceeds safe size limit.'
+                };
+            }
+
+            // -------------------------------------------------------------
+            // BLOCKS
+            // -------------------------------------------------------------
+
+            const files =
+                this.extractFileBlocks(
+                    raw
+                );
+
+            // -------------------------------------------------------------
+            // NONE
+            // -------------------------------------------------------------
+
+            if (!files.length) {
+
+                return {
+
+                    ok: false,
+
+                    error:
+                        'No valid patch blocks found.'
+                };
+            }
+
+            // -------------------------------------------------------------
+            // VALIDATE
+            // -------------------------------------------------------------
+
+            const validation =
+                this.validateFiles(
+                    files
+                );
+
+            if (!validation.ok) {
+
+                return validation;
+            }
+
+            // -------------------------------------------------------------
+            // NORMALIZED
+            // -------------------------------------------------------------
+
+            const normalized =
+                this.buildNormalizedPatch(
+                    files
+                );
+
+            // -------------------------------------------------------------
+            // SAVE
+            // -------------------------------------------------------------
+
+            this.lastPatch =
+                normalized.raw;
+
+            // -------------------------------------------------------------
+            // RESULT
+            // -------------------------------------------------------------
 
             return {
+
                 ok: true,
-                patch: parsed,
-                error: null
+
+                summary:
+                    `Parsed ${files.length} patch file(s).`,
+
+                patch:
+                    normalized.raw,
+
+                files:
+                    normalized.files,
+
+                raw:
+                    raw
             };
 
         } catch (err) {
-            console.error('[PatchEngine] Parse failed:', err);
+
+            console.error(
+                '[ArchitectPatchEngine] Parse failed:',
+                err
+            );
 
             return {
+
                 ok: false,
-                patch: null,
-                error: err.message || 'Unknown patch parse error.'
+
+                error:
+                    err.message ||
+
+                    'Patch parsing failed.'
             };
         }
     }
 
+    // -------------------------------------------------------------------------
+    // EXTRACT FILE BLOCKS
+    // -------------------------------------------------------------------------
+
+    extractFileBlocks(raw) {
+
+        // ---------------------------------------------------------------------
+        // FORMAT:
+        //
+        // <<<FILE:path/to/file.js
+        // code...
+        // >>>END_FILE
+        // ---------------------------------------------------------------------
+
+        const regex =
+            /<<<FILE:(.*?)\n([\s\S]*?)>>>END_FILE/g;
+
+        const matches =
+            [
+                ...raw.matchAll(
+                    regex
+                )
+            ];
+
+        return matches.map(
+            (match) => {
+
+                const filePath =
+                    match[1]
+                        ?.trim();
+
+                const content =
+                    match[2] || '';
+
+                return {
+
+                    path:
+                        filePath,
+
+                    content
+                };
+            }
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // VALIDATE FILES
+    // -------------------------------------------------------------------------
+
+    validateFiles(files = []) {
+
+        for (
+            const file
+            of files
+        ) {
+
+            // -------------------------------------------------------------
+            // PATH
+            // -------------------------------------------------------------
+
+            if (
+                !file.path
+            ) {
+
+                return {
+
+                    ok: false,
+
+                    error:
+                        'Patch file missing path.'
+                };
+            }
+
+            // -------------------------------------------------------------
+            // TRAVERSAL
+            // -------------------------------------------------------------
+
+            if (
+                file.path.includes('..')
+            ) {
+
+                return {
+
+                    ok: false,
+
+                    error:
+                        `Unsafe path blocked: ${file.path}`
+                };
+            }
+
+            // -------------------------------------------------------------
+            // EXTENSION
+            // -------------------------------------------------------------
+
+            const valid =
+                this.allowedExtensions
+                    .some((ext) =>
+                        file.path.endsWith(
+                            ext
+                        )
+                    );
+
+            if (!valid) {
+
+                return {
+
+                    ok: false,
+
+                    error:
+                        `Unsupported file type: ${file.path}`
+                };
+            }
+
+            // -------------------------------------------------------------
+            // CONTENT
+            // -------------------------------------------------------------
+
+            if (
+                typeof file.content !==
+                'string'
+            ) {
+
+                return {
+
+                    ok: false,
+
+                    error:
+                        `Invalid file content: ${file.path}`
+                };
+            }
+        }
+
+        return {
+
+            ok: true
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // NORMALIZE
+    // -------------------------------------------------------------------------
+
+    buildNormalizedPatch(files = []) {
+
+        const normalizedFiles =
+            [];
+
+        let combined =
+            '';
+
+        for (
+            const file
+            of files
+        ) {
+
+            const normalizedContent =
+                String(
+                    file.content || ''
+                )
+                    .replace(/\r/g, '');
+
+            normalizedFiles.push({
+
+                path:
+                    file.path,
+
+                content:
+                    normalizedContent
+            });
+
+            combined +=
+`<<<FILE:${file.path}
+${normalizedContent}
+>>>END_FILE
+
+`;
+        }
+
+        return {
+
+            raw:
+                combined.trim(),
+
+            files:
+                normalizedFiles
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // EXTRACT PATCH ONLY
+    // -------------------------------------------------------------------------
+
+    extractPatchFromAIResponse(
+        response
+    ) {
+
+        try {
+
+            // -------------------------------------------------------------
+            // STRING
+            // -------------------------------------------------------------
+
+            if (
+                typeof response ===
+                'string'
+            ) {
+
+                return this.parse(
+                    response
+                );
+            }
+
+            // -------------------------------------------------------------
+            // PATCH FIELD
+            // -------------------------------------------------------------
+
+            if (
+                response?.patch
+            ) {
+
+                return this.parse(
+                    response.patch
+                );
+            }
+
+            // -------------------------------------------------------------
+            // RAW FIELD
+            // -------------------------------------------------------------
+
+            if (
+                response?.raw
+            ) {
+
+                return this.parse(
+                    response.raw
+                );
+            }
+
+            return {
+
+                ok: false,
+
+                error:
+                    'No patch field found in AI response.'
+            };
+
+        } catch (err) {
+
+            console.error(
+                '[ArchitectPatchEngine] extractPatchFromAIResponse failed:',
+                err
+            );
+
+            return {
+
+                ok: false,
+
+                error:
+                    err.message
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GETTERS
+    // -------------------------------------------------------------------------
+
     getLastPatch() {
+
         return this.lastPatch;
     }
 
+    // -------------------------------------------------------------------------
+    // CLEAR
+    // -------------------------------------------------------------------------
+
     clear() {
-        this.lastPatch = null;
-    }
 
-    // --------------------------------------------------------
-    // VALIDATION
-    // --------------------------------------------------------
-
-    validate(patch) {
-        if (!patch || typeof patch !== 'object') {
-            throw new Error('Patch must be an object.');
-        }
-
-        if (!patch.summary || typeof patch.summary !== 'string') {
-            throw new Error('Patch missing summary.');
-        }
-
-        if (!Array.isArray(patch.files)) {
-            throw new Error('Patch files array missing.');
-        }
-
-        if (patch.files.length === 0) {
-            throw new Error('Patch contains no file operations.');
-        }
-
-        patch.files.forEach((file, index) => {
-            this.validateFilePatch(file, index);
-        });
-
-        return true;
-    }
-
-    validateFilePatch(file, index) {
-        if (!file.path || typeof file.path !== 'string') {
-            throw new Error(`files[${index}] missing path.`);
-        }
-
-        if (!file.operation || typeof file.operation !== 'string') {
-            throw new Error(`files[${index}] missing operation.`);
-        }
-
-        const allowedOperations = [
-            'replace',
-            'create',
-            'delete',
-            'append'
-        ];
-
-        if (!allowedOperations.includes(file.operation)) {
-            throw new Error(
-                `files[${index}] invalid operation "${file.operation}".`
-            );
-        }
-
-        if (
-            file.operation === 'replace' ||
-            file.operation === 'append'
-        ) {
-            if (typeof file.replace !== 'string') {
-                throw new Error(
-                    `files[${index}] missing replace content.`
-                );
-            }
-        }
-
-        if (file.operation === 'replace') {
-            if (typeof file.find !== 'string') {
-                throw new Error(
-                    `files[${index}] missing find content.`
-                );
-            }
-        }
-    }
-
-    // --------------------------------------------------------
-    // JSON EXTRACTION
-    // --------------------------------------------------------
-
-    extractJSON(raw) {
-        const trimmed = raw.trim();
-
-        // plain JSON
-        if (
-            trimmed.startsWith('{') &&
-            trimmed.endsWith('}')
-        ) {
-            return trimmed;
-        }
-
-        // markdown fenced json
-        const fencedMatch = trimmed.match(
-            /```(?:json)?\s*([\s\S]*?)```/
-        );
-
-        if (fencedMatch && fencedMatch[1]) {
-            return fencedMatch[1].trim();
-        }
-
-        // fallback object extraction
-        const firstBrace = trimmed.indexOf('{');
-        const lastBrace = trimmed.lastIndexOf('}');
-
-        if (firstBrace === -1 || lastBrace === -1) {
-            throw new Error('No JSON object found in response.');
-        }
-
-        return trimmed.slice(firstBrace, lastBrace + 1);
-    }
-
-    // --------------------------------------------------------
-    // PATCH SUMMARY
-    // --------------------------------------------------------
-
-    summarize(patch) {
-        if (!patch) return null;
-
-        return {
-            summary: patch.summary || 'Unknown Patch',
-            risk: patch.risk || 'unknown',
-            operations: patch.files.length,
-            files: patch.files.map((f) => ({
-                path: f.path,
-                operation: f.operation
-            }))
-        };
-    }
-
-    // --------------------------------------------------------
-    // DIFF PREVIEW MODEL
-    // --------------------------------------------------------
-
-    createPreviewModel(patch) {
-        if (!patch) return [];
-
-        return patch.files.map((file, index) => ({
-            id: `${Date.now()}-${index}`,
-            path: file.path,
-            operation: file.operation,
-            find: file.find || '',
-            replace: file.replace || '',
-            content: file.content || '',
-            risk: patch.risk || 'unknown'
-        }));
-    }
-
-    // --------------------------------------------------------
-    // FUTURE PATCH APPLY PLACEHOLDER
-    // --------------------------------------------------------
-
-    async apply() {
-        console.warn(
-            '[PatchEngine] apply() not implemented yet.'
-        );
-
-        return {
-            ok: false,
-            error: 'Patch apply not implemented.'
-        };
+        this.lastPatch =
+            null;
     }
 }
