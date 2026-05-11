@@ -1,230 +1,426 @@
-// api/architect.js
-// ------------------------------------------------------------
-// Symbiote Studio — Architect API
-// Phase 1: Structured JSON Patch Responses
-// ------------------------------------------------------------
+// /api/architect.js
+// -----------------------------------------------------------------------------
+// Symbiote Studio — Architect AI API
+// Production Runtime Endpoint
+// -----------------------------------------------------------------------------
 
-export default async function handler(req, res) {
+import OpenAI
+from 'openai';
 
-    // --------------------------------------------------------
-    // METHOD
-    // --------------------------------------------------------
+// -----------------------------------------------------------------------------
+// CLIENT
+// -----------------------------------------------------------------------------
 
-    if (req.method !== 'POST') {
+const client =
+    new OpenAI({
 
-        return res.status(405).json({
-            error: 'Method not allowed'
-        });
-    }
+        apiKey:
+            process.env.OPENAI_API_KEY
+    });
 
-    // --------------------------------------------------------
-    // ENV
-    // --------------------------------------------------------
+// -----------------------------------------------------------------------------
+// CONFIG
+// -----------------------------------------------------------------------------
 
-    const apiKey =
-        process.env.OPENAI_API_KEY;
+const MODEL =
+    process.env.ARCHITECT_MODEL ||
+    'gpt-5-5';
 
-    if (!apiKey) {
+const MAX_INPUT_CHARS =
+    120000;
 
-        return res.status(500).json({
-            error:
-                'OPENAI_API_KEY missing'
-        });
-    }
+// -----------------------------------------------------------------------------
+// SYSTEM PROMPT
+// -----------------------------------------------------------------------------
 
-    try {
+const SYSTEM_PROMPT = `
+You are Architect AI.
 
-        // ----------------------------------------------------
-        // BODY
-        // ----------------------------------------------------
+You are an elite senior full-stack runtime engineer working on:
 
-        const {
-            prompt = '',
-            projectContext = {},
-            runtimeErrors = [],
-            runtimeWarnings = [],
-            files = []
-        } = req.body || {};
-
-        // ----------------------------------------------------
-        // SYSTEM PROMPT
-        // ----------------------------------------------------
-
-        const systemPrompt = `
-You are Architect Runtime,
-an autonomous software engineering AI.
+"Symbiote Studio · MoE World Model"
 
 Your job:
-- analyze runtime problems
-- inspect project structure
-- generate SAFE structured patches
+- analyze runtime issues
+- inspect scan data
+- identify root causes
+- generate production-safe fixes
+- generate structured repair patches
+- avoid placeholders
+- avoid pseudo-code
+- avoid vague explanations
 
 IMPORTANT RULES:
 
-1. NEVER return markdown.
-2. NEVER return explanations outside JSON.
-3. NEVER return prose outside JSON.
-4. ONLY return valid JSON.
-5. Response must always be machine-readable.
+1. Return STRICT JSON ONLY.
+2. Do not wrap JSON in markdown.
+3. Never return prose outside JSON.
+4. Keep patches production-grade.
+5. Avoid destructive edits.
+6. Prefer minimal safe modifications.
+7. Assume mobile-first runtime architecture.
+8. Preserve existing design language.
+9. Preserve runtime stability.
+10. If unsure, explain uncertainty safely.
 
-Patch format:
+JSON FORMAT:
 
 {
   "summary": "short summary",
-  "risk": "low | medium | high",
-  "files": [
-    {
-      "path": "relative/file.js",
-      "operation": "replace | append | create | delete",
-      "find": "old code",
-      "replace": "new code"
-    }
-  ]
+  "analysis": "detailed analysis",
+  "patch": "code patch",
+  "notes": "optional implementation notes"
 }
-
-Rules:
-- keep fixes minimal
-- avoid rewriting huge files
-- preserve existing architecture
-- prioritize runtime stability
-- avoid destructive edits
-- avoid deleting logic unless necessary
-
-If uncertain:
-- return low-risk guards
-- null checks
-- method existence checks
-- syntax-safe patches
 `;
 
-        // ----------------------------------------------------
-        // USER PAYLOAD
-        // ----------------------------------------------------
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
 
-        const userPayload = {
-            issue: prompt,
-            runtimeErrors,
-            runtimeWarnings,
-            projectContext,
-            files
-        };
+function json(
+    res,
+    status,
+    payload
+) {
 
-        // ----------------------------------------------------
-        // OPENAI REQUEST
-        // ----------------------------------------------------
+    res.status(status);
 
-        const response = await fetch(
-            'https://api.openai.com/v1/chat/completions',
-            {
-                method: 'POST',
+    res.setHeader(
+        'Content-Type',
+        'application/json'
+    );
 
-                headers: {
-                    'Content-Type':
-                        'application/json',
+    return res.send(
+        JSON.stringify(payload)
+    );
+}
 
-                    Authorization:
-                        `Bearer ${apiKey}`
-                },
+function sanitizeInput(input) {
 
-                body: JSON.stringify({
+    if (!input) {
 
-                    model:
-                        'gpt-5.5',
+        return '';
+    }
 
-                    temperature:
-                        0.15,
+    return String(input)
+        .slice(
+            0,
+            MAX_INPUT_CHARS
+        )
+        .trim();
+}
 
-                    messages: [
+function safeParse(content) {
 
-                        {
-                            role: 'system',
-                            content: systemPrompt
-                        },
+    try {
 
-                        {
-                            role: 'user',
-                            content:
-                                JSON.stringify(
-                                    userPayload,
-                                    null,
-                                    2
-                                )
-                        }
-                    ]
-                })
-            }
-        );
-
-        // ----------------------------------------------------
-        // OPENAI FAILURE
-        // ----------------------------------------------------
-
-        if (!response.ok) {
-
-            const errorText =
-                await response.text();
-
-            console.error(
-                '[Architect API] OpenAI Error:',
-                errorText
-            );
-
-            return res.status(500).json({
-                error:
-                    'OpenAI request failed',
-                details:
-                    errorText
-            });
-        }
-
-        // ----------------------------------------------------
-        // OPENAI DATA
-        // ----------------------------------------------------
-
-        const data =
-            await response.json();
-
-        const content =
-            data?.choices?.[0]
-                ?.message?.content;
-
-        if (!content) {
-
-            return res.status(500).json({
-                error:
-                    'Empty AI response'
-            });
-        }
-
-        // ----------------------------------------------------
-        // RESPONSE
-        // ----------------------------------------------------
-
-        return res.status(200).json({
+        return {
 
             ok: true,
 
-            raw:
-                content,
-
-            usage:
-                data.usage || null
-        });
+            data:
+                JSON.parse(content)
+        };
 
     } catch (err) {
 
         console.error(
-            '[Architect API] Fatal Error:',
+            '[Architect API] JSON parse failed:',
             err
         );
 
-        return res.status(500).json({
+        return {
+
+            ok: false,
 
             error:
-                'Architect runtime failure',
+                err.message
+        };
+    }
+}
 
-            details:
-                err.message || String(err)
-        });
+// -----------------------------------------------------------------------------
+// MAIN
+// -----------------------------------------------------------------------------
+
+export default async function handler(
+    req,
+    res
+) {
+
+    // -------------------------------------------------------------------------
+    // METHOD
+    // -------------------------------------------------------------------------
+
+    if (
+        req.method !==
+        'POST'
+    ) {
+
+        return json(
+            res,
+            405,
+            {
+
+                ok: false,
+
+                error:
+                    'Method not allowed.'
+            }
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // API KEY
+    // -------------------------------------------------------------------------
+
+    if (
+        !process.env.OPENAI_API_KEY
+    ) {
+
+        return json(
+            res,
+            500,
+            {
+
+                ok: false,
+
+                error:
+                    'OPENAI_API_KEY missing.'
+            }
+        );
+    }
+
+    try {
+
+        // ---------------------------------------------------------------------
+        // INPUT
+        // ---------------------------------------------------------------------
+
+        const body =
+            req.body || {};
+
+        const prompt =
+            sanitizeInput(
+                body.prompt
+            );
+
+        const scan =
+            body.scan || {};
+
+        if (!prompt) {
+
+            return json(
+                res,
+                400,
+                {
+
+                    ok: false,
+
+                    error:
+                        'Prompt is required.'
+                }
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // USER PAYLOAD
+        // ---------------------------------------------------------------------
+
+        const runtimePayload = `
+USER ISSUE:
+
+${prompt}
+
+RUNTIME SCAN:
+
+${JSON.stringify(
+    scan,
+    null,
+    2
+)}
+        `;
+
+        // ---------------------------------------------------------------------
+        // OPENAI REQUEST
+        // ---------------------------------------------------------------------
+
+        const completion =
+            await client.chat.completions.create({
+
+                model:
+                    MODEL,
+
+                temperature:
+                    0.2,
+
+                max_tokens:
+                    2400,
+
+                messages: [
+
+                    {
+                        role:
+                            'system',
+
+                        content:
+                            SYSTEM_PROMPT
+                    },
+
+                    {
+                        role:
+                            'user',
+
+                        content:
+                            runtimePayload
+                    }
+                ]
+            });
+
+        // ---------------------------------------------------------------------
+        // CONTENT
+        // ---------------------------------------------------------------------
+
+        const content =
+            completion
+                ?.choices?.[0]
+                ?.message
+                ?.content;
+
+        if (!content) {
+
+            throw new Error(
+                'OpenAI returned empty content.'
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // PARSE
+        // ---------------------------------------------------------------------
+
+        const parsed =
+            safeParse(
+                content
+            );
+
+        // ---------------------------------------------------------------------
+        // FALLBACK
+        // ---------------------------------------------------------------------
+
+        if (!parsed.ok) {
+
+            console.warn(
+                '[Architect API] Falling back to raw mode.'
+            );
+
+            return json(
+                res,
+                200,
+                {
+
+                    ok: true,
+
+                    raw:
+                        content,
+
+                    summary:
+                        'AI response generated.',
+
+                    analysis:
+                        content,
+
+                    patch:
+                        '',
+
+                    notes:
+                        'Response was not strict JSON.'
+                }
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // NORMALIZED
+        // ---------------------------------------------------------------------
+
+        const normalized = {
+
+            ok: true,
+
+            summary:
+                parsed.data.summary ||
+
+                'Architect analysis complete.',
+
+            analysis:
+                parsed.data.analysis ||
+
+                '',
+
+            patch:
+                parsed.data.patch ||
+
+                '',
+
+            notes:
+                parsed.data.notes ||
+
+                ''
+        };
+
+        // ---------------------------------------------------------------------
+        // RESPONSE
+        // ---------------------------------------------------------------------
+
+        return json(
+            res,
+            200,
+            normalized
+        );
+
+    } catch (err) {
+
+        console.error(
+            '[Architect API]',
+            err
+        );
+
+        // ---------------------------------------------------------------------
+        // OPENAI RATE LIMIT
+        // ---------------------------------------------------------------------
+
+        if (
+            err?.status === 429
+        ) {
+
+            return json(
+                res,
+                429,
+                {
+
+                    ok: false,
+
+                    error:
+                        'OpenAI rate limit exceeded.'
+                }
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // GENERIC
+        // ---------------------------------------------------------------------
+
+        return json(
+            res,
+            500,
+            {
+
+                ok: false,
+
+                error:
+                    err.message ||
+
+                    'Architect API failure.'
+            }
+        );
     }
 }
