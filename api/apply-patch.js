@@ -1,25 +1,222 @@
-// api/apply-patch.js
+// /api/apply-patch.js
 // -----------------------------------------------------------------------------
-// Symbiote Studio — Apply Patch API
-// Phase 2: Safe Patch Application Runtime
-// -----------------------------------------------------------------------------
-//
-// Responsibilities:
-// - receive structured patch JSON
-// - validate patch payload
-// - apply patch set safely
-// - create snapshots automatically
-// - return detailed results
-//
-// IMPORTANT:
-// This route intentionally blocks:
-// - destructive delete operations
-// - arbitrary filesystem access
-// - malformed patch payloads
+// Symbiote Studio — Architect Patch Apply API
+// Safe Runtime Patch Engine
 // -----------------------------------------------------------------------------
 
-import ArchitectFSAgent
-from '../server/architect_fs_agent.js';
+import fs
+from 'fs/promises';
+
+import path
+from 'path';
+
+// -----------------------------------------------------------------------------
+// CONFIG
+// -----------------------------------------------------------------------------
+
+const PROJECT_ROOT =
+    process.cwd();
+
+const MAX_PATCH_SIZE =
+    500000;
+
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
+
+function json(
+    res,
+    status,
+    payload
+) {
+
+    res.status(status);
+
+    res.setHeader(
+        'Content-Type',
+        'application/json'
+    );
+
+    return res.send(
+        JSON.stringify(payload)
+    );
+}
+
+function sanitizePatch(patch) {
+
+    return String(
+        patch || ''
+    )
+        .replace(/\r/g, '')
+        .trim();
+}
+
+function ensureSafePath(filePath) {
+
+    const resolved =
+        path.resolve(
+            PROJECT_ROOT,
+            filePath
+        );
+
+    if (
+        !resolved.startsWith(
+            PROJECT_ROOT
+        )
+    ) {
+
+        throw new Error(
+            `Unsafe file path blocked: ${filePath}`
+        );
+    }
+
+    return resolved;
+}
+
+async function fileExists(filePath) {
+
+    try {
+
+        await fs.access(
+            filePath
+        );
+
+        return true;
+
+    } catch {
+
+        return false;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// PATCH PARSER
+// -----------------------------------------------------------------------------
+
+function parsePatchBlocks(rawPatch) {
+
+    // -------------------------------------------------------------------------
+    // FORMAT:
+    //
+    // <<<FILE:path/to/file.js
+    // file content
+    // >>>END_FILE
+    //
+    // -------------------------------------------------------------------------
+
+    const regex =
+        /<<<FILE:(.*?)\n([\s\S]*?)>>>END_FILE/g;
+
+    const matches =
+        [
+            ...rawPatch.matchAll(
+                regex
+            )
+        ];
+
+    if (!matches.length) {
+
+        throw new Error(
+            'No valid patch blocks found.'
+        );
+    }
+
+    return matches.map(
+        (match) => {
+
+            const relativePath =
+                match[1]?.trim();
+
+            const content =
+                match[2] ?? '';
+
+            if (!relativePath) {
+
+                throw new Error(
+                    'Patch block missing file path.'
+                );
+            }
+
+            return {
+
+                path:
+                    relativePath,
+
+                content
+            };
+        }
+    );
+}
+
+// -----------------------------------------------------------------------------
+// WRITE FILE
+// -----------------------------------------------------------------------------
+
+async function writePatchedFile(
+    relativePath,
+    content
+) {
+
+    const absolutePath =
+        ensureSafePath(
+            relativePath
+        );
+
+    const directory =
+        path.dirname(
+            absolutePath
+        );
+
+    // -------------------------------------------------------------------------
+    // CREATE DIRECTORY
+    // -------------------------------------------------------------------------
+
+    await fs.mkdir(
+        directory,
+        {
+            recursive: true
+        }
+    );
+
+    // -------------------------------------------------------------------------
+    // BACKUP
+    // -------------------------------------------------------------------------
+
+    const exists =
+        await fileExists(
+            absolutePath
+        );
+
+    if (exists) {
+
+        const previous =
+            await fs.readFile(
+                absolutePath,
+                'utf8'
+            );
+
+        await fs.writeFile(
+
+            `${absolutePath}.bak`,
+
+            previous,
+
+            'utf8'
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // WRITE
+    // -------------------------------------------------------------------------
+
+    await fs.writeFile(
+        absolutePath,
+        content,
+        'utf8'
+    );
+
+    return absolutePath;
+}
 
 // -----------------------------------------------------------------------------
 // MAIN
@@ -34,179 +231,146 @@ export default async function handler(
     // METHOD
     // -------------------------------------------------------------------------
 
-    if (req.method !== 'POST') {
+    if (
+        req.method !==
+        'POST'
+    ) {
 
-        return res.status(405).json({
+        return json(
+            res,
+            405,
+            {
 
-            ok: false,
+                ok: false,
 
-            error:
-                'Method not allowed.'
-        });
+                error:
+                    'Method not allowed.'
+            }
+        );
     }
 
     try {
 
         // ---------------------------------------------------------------------
-        // BODY
+        // INPUT
         // ---------------------------------------------------------------------
 
         const body =
             req.body || {};
 
         const patch =
-            body.patch;
+            sanitizePatch(
+                body.patch
+            );
 
-        // ---------------------------------------------------------------------
-        // VALIDATION
-        // ---------------------------------------------------------------------
+        if (!patch) {
 
-        if (
-            !patch ||
-            typeof patch !== 'object'
-        ) {
-
-            return res.status(400).json({
-
-                ok: false,
-
-                error:
-                    'Patch payload missing.'
-            });
-        }
-
-        if (
-            !Array.isArray(
-                patch.files
-            )
-        ) {
-
-            return res.status(400).json({
-
-                ok: false,
-
-                error:
-                    'Patch files array missing.'
-            });
-        }
-
-        if (
-            patch.files.length === 0
-        ) {
-
-            return res.status(400).json({
-
-                ok: false,
-
-                error:
-                    'Patch contains no operations.'
-            });
-        }
-
-        // ---------------------------------------------------------------------
-        // SAFE MODE
-        // ---------------------------------------------------------------------
-
-        for (const filePatch of patch.files) {
-
-            if (
-                filePatch.operation ===
-                'delete'
-            ) {
-
-                return res.status(403).json({
+            return json(
+                res,
+                400,
+                {
 
                     ok: false,
 
                     error:
-                        'Delete operations are blocked in safe mode.'
-                });
-            }
+                        'Patch payload missing.'
+                }
+            );
         }
 
         // ---------------------------------------------------------------------
-        // FS AGENT
+        // SIZE LIMIT
         // ---------------------------------------------------------------------
 
-        const fsAgent =
-            new ArchitectFSAgent();
+        if (
+            patch.length >
+            MAX_PATCH_SIZE
+        ) {
+
+            return json(
+                res,
+                413,
+                {
+
+                    ok: false,
+
+                    error:
+                        'Patch exceeds safe size limit.'
+                }
+            );
+        }
 
         // ---------------------------------------------------------------------
-        // APPLY PATCH SET
+        // PARSE
         // ---------------------------------------------------------------------
 
-        const results =
-            await fsAgent.applyPatchSet(
-                patch.files
+        const patchFiles =
+            parsePatchBlocks(
+                patch
             );
 
         // ---------------------------------------------------------------------
-        // SUCCESS STATS
+        // APPLY
         // ---------------------------------------------------------------------
 
-        const successCount =
-            results.filter(
-                (r) => r.ok
-            ).length;
+        const modifiedFiles =
+            [];
 
-        const failedCount =
-            results.length -
-            successCount;
+        for (
+            const file
+            of patchFiles
+        ) {
 
-        // ---------------------------------------------------------------------
-        // SNAPSHOTS
-        // ---------------------------------------------------------------------
+            await writePatchedFile(
 
-        const snapshots =
-            await fsAgent.listSnapshots();
+                file.path,
+
+                file.content
+            );
+
+            modifiedFiles.push(
+                file.path
+            );
+        }
 
         // ---------------------------------------------------------------------
         // RESPONSE
         // ---------------------------------------------------------------------
 
-        return res.status(200).json({
+        return json(
+            res,
+            200,
+            {
 
-            ok:
-                failedCount === 0,
+                ok: true,
 
-            summary:
-                patch.summary ||
-                'Patch applied.',
+                message:
+                    'Patch applied successfully.',
 
-            risk:
-                patch.risk ||
-                'unknown',
-
-            totalOperations:
-                results.length,
-
-            successCount,
-
-            failedCount,
-
-            results,
-
-            snapshots:
-                snapshots.slice(0, 10)
-        });
+                files:
+                    modifiedFiles
+            }
+        );
 
     } catch (err) {
 
         console.error(
-            '[ApplyPatchAPI] Fatal Error:',
+            '[Apply Patch API]',
             err
         );
 
-        return res.status(500).json({
+        return json(
+            res,
+            500,
+            {
 
-            ok: false,
+                ok: false,
 
-            error:
-                'Patch application failed.',
+                error:
+                    err.message ||
 
-            details:
-                err.message ||
-                String(err)
-        });
+                    'Patch apply failed.'
+            }
+        );
     }
 }
