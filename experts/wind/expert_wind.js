@@ -225,49 +225,61 @@ export default class WindExpert {
     // AIRFLOW
     // ---------------------------------------------------
 
-    this.airflow.setIntensity(
-      this.intensity
-    );
+    if (this.airflow?.setIntensity) {
+      this.airflow.setIntensity(
+        this.intensity
+      );
+    }
 
     // ---------------------------------------------------
     // GUSTS
     // ---------------------------------------------------
 
-    this.gust.setIntensity(
-    energy * this.movement
-    );
+    if (this.gust?.setIntensity) {
+      this.gust.setIntensity(
+        energy * this.movement
+      );
+    }
 
     // ---------------------------------------------------
     // TEXTURE
     // ---------------------------------------------------
 
-    this.textureStem.setTexture(
-      this.texture
-    );
+    if (this.textureStem?.setTexture) {
+      this.textureStem.setTexture(
+        this.texture
+      );
+    }
 
     // ---------------------------------------------------
     // RESONANCE
     // ---------------------------------------------------
 
-    this.resonanceStem.setIntensity(
-    this.resonance * energy
-    );
+    if (this.resonanceStem?.setIntensity) {
+      this.resonanceStem.setIntensity(
+        this.resonance * energy
+      );
+    }
 
     // ---------------------------------------------------
     // ENVIRONMENT
     // ---------------------------------------------------
 
-    this.environment.setWidth(
-      this.stereoWidth
-    );
+    if (this.environment?.setWidth) {
+      this.environment.setWidth(
+        this.stereoWidth
+      );
+    }
 
     // ---------------------------------------------------
     // MODULATION DEPTH
     // ---------------------------------------------------
 
-    this.modulation.setDepth(
-      this.movement * energy
-    );
+    if (this.modulation?.setDepth) {
+      this.modulation.setDepth(
+        this.movement * energy
+      );
+    }
 
     // ---------------------------------------------------
     // GLOBAL TONE
@@ -387,18 +399,18 @@ export default class WindExpert {
 
     try {
 
-      this.airflow.destroy();
-      this.gust.destroy();
-      this.resonanceStem.destroy();
-      this.textureStem.destroy();
-      this.environment.destroy();
+      this.airflow?.destroy?.();
+      this.gust?.destroy?.();
+      this.resonanceStem?.destroy?.();
+      this.textureStem?.destroy?.();
+      this.environment?.destroy?.();
 
-      this.modulation.destroy();
+      this.modulation?.destroy?.();
 
-      this.output.disconnect();
-      this.masterTone.disconnect();
-      this.masterCompressor.disconnect();
-      this.stereo.disconnect();
+      this.output?.disconnect?.();
+      this.masterTone?.disconnect?.();
+      this.masterCompressor?.disconnect?.();
+      this.stereo?.disconnect?.();
 
     } catch (err) {
 
