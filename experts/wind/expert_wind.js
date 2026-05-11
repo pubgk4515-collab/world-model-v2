@@ -233,8 +233,8 @@ export default class WindExpert {
     // GUSTS
     // ---------------------------------------------------
 
-    this.gust.setAmount(
-      energy * this.movement
+    this.gust.setIntensity(
+    energy * this.movement
     );
 
     // ---------------------------------------------------
@@ -249,8 +249,8 @@ export default class WindExpert {
     // RESONANCE
     // ---------------------------------------------------
 
-    this.resonanceStem.setAmount(
-      this.resonance * energy
+    this.resonanceStem.setIntensity(
+    this.resonance * energy
     );
 
     // ---------------------------------------------------
