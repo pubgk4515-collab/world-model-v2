@@ -1,637 +1,469 @@
-// /devtools/architect/architect_runtime.js
+// /api/architect.js
 // -----------------------------------------------------------------------------
-// Symbiote Studio — Architect Runtime
-// Premium AI Runtime Engine
+// Symbiote Studio — Architect API
+// Premium AI Runtime Endpoint
+// Vercel / Next.js Serverless Function
 // -----------------------------------------------------------------------------
 
-import ArchitectRenderer
-from './architect_renderer.js';
+import OpenAI
+from 'openai';
+
+// -----------------------------------------------------------------------------
+// OPENAI
+// -----------------------------------------------------------------------------
+
+const client =
+    new OpenAI({
+
+        apiKey:
+            process.env.OPENAI_API_KEY
+    });
+
+// -----------------------------------------------------------------------------
+// CONFIG
+// -----------------------------------------------------------------------------
+
+const MODEL =
+    process.env.ARCHITECT_MODEL ||
+    'gpt-5.5';
+
+const MAX_INPUT_LENGTH =
+    120000;
+
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
+
+function json(
+    response,
+    status,
+    payload
+) {
+
+    response
+        .status(status)
+        .json(payload);
+}
+
+function clampInput(value) {
+
+    if (!value) {
+        return '';
+    }
+
+    return String(value)
+        .slice(
+            0,
+            MAX_INPUT_LENGTH
+        );
+}
+
+function safeStringify(value) {
+
+    try {
+
+        return JSON.stringify(
+            value,
+            null,
+            2
+        );
+
+    } catch (_) {
+
+        return '{}';
+    }
+}
+
+function buildSystemPrompt() {
+
+    return `
+You are Architect AI.
+
+You are the runtime repair system for a project called:
+"Symbiote Studio · MoE World Model"
+
+Your job:
+- analyze runtime issues
+- inspect scan data
+- identify root causes
+- generate production-grade fixes
+- generate safe patch output
+- avoid hallucinations
+- never generate incomplete code
+- preserve existing architecture
+- preserve mobile-first UI philosophy
+- preserve glassmorphism design system
+
+Return STRICT JSON ONLY.
+
+Required JSON format:
+
+{
+  "summary": "short summary",
+  "analysis": "detailed analysis",
+  "patch": "full code patch or fix",
+  "notes": "extra notes"
+}
+
+Rules:
+- never wrap JSON in markdown
+- never use triple backticks
+- patch must contain real code
+- do not truncate code
+- do not omit imports
+- do not explain outside JSON
+`;
+}
+
+function buildUserPrompt({
+    prompt,
+    scan
+}) {
+
+    return `
+ARCHITECT RUNTIME REQUEST
+
+USER ISSUE:
+${clampInput(prompt)}
+
+RUNTIME SCAN:
+${safeStringify(scan)}
+
+TASK:
+1. Analyze the issue
+2. Explain root cause
+3. Generate repair patch
+4. Keep fixes production-safe
+5. Preserve architecture
+`;
+}
+
+function extractContent(response) {
+
+    // RESPONSES API FORMAT
+
+    if (
+        typeof response.output_text ===
+        'string'
+    ) {
+
+        return response.output_text;
+    }
+
+    // FALLBACK
+
+    if (
+        Array.isArray(
+            response.output
+        )
+    ) {
+
+        const chunks = [];
+
+        for (
+            const item
+            of response.output
+        ) {
+
+            if (
+                !item ||
+                !Array.isArray(
+                    item.content
+                )
+            ) {
+
+                continue;
+            }
+
+            for (
+                const part
+                of item.content
+            ) {
+
+                if (
+                    part?.text
+                ) {
+
+                    chunks.push(
+                        part.text
+                    );
+                }
+            }
+        }
+
+        return chunks.join(
+            '\n'
+        );
+    }
+
+    return '';
+}
+
+function parseAIResponse(text) {
+
+    if (!text) {
+
+        return {
+
+            summary:
+                'Empty AI response.',
+
+            analysis:
+                '',
+
+            patch:
+                '',
+
+            notes:
+                ''
+        };
+    }
+
+    // CLEANUP
+
+    const cleaned =
+        text
+            .replaceAll(
+                '```json',
+                ''
+            )
+            .replaceAll(
+                '```',
+                ''
+            )
+            .trim();
+
+    // TRY JSON
+
+    try {
+
+        return JSON.parse(
+            cleaned
+        );
+
+    } catch (_) {
+
+        // FALLBACK
+
+        return {
+
+            summary:
+                'AI response generated.',
+
+            analysis:
+                cleaned,
+
+            patch:
+                '',
+
+            notes:
+                'Response was not valid JSON.'
+        };
+    }
+}
 
 // -----------------------------------------------------------------------------
 // MAIN
 // -----------------------------------------------------------------------------
 
-export default class ArchitectRuntime {
+export default async function handler(
+    request,
+    response
+) {
 
     // -------------------------------------------------------------------------
-    // CONSTRUCTOR
+    // METHOD
     // -------------------------------------------------------------------------
 
-    constructor(config = {}) {
+    if (
+        request.method !==
+        'POST'
+    ) {
 
-        // ---------------------------------------------------------------------
-        // API
-        // ---------------------------------------------------------------------
+        return json(
+            response,
+            405,
+            {
 
-        this.apiEndpoint =
-            config.apiEndpoint ||
-            '/api/architect';
+                ok: false,
 
-        this.applyEndpoint =
-            config.applyEndpoint ||
-            '/api/apply-patch';
-
-        // ---------------------------------------------------------------------
-        // DOM
-        // ---------------------------------------------------------------------
-
-        this.root =
-            config.root || null;
-
-        this.output =
-            config.output || null;
-
-        this.textarea =
-            config.textarea || null;
-
-        this.generateBtn =
-            config.generateBtn || null;
-
-        this.scanBtn =
-            config.scanBtn || null;
-
-        this.applyBtn =
-            config.applyBtn || null;
-
-        // ---------------------------------------------------------------------
-        // RENDERER
-        // ---------------------------------------------------------------------
-
-        if (!this.output) {
-
-            throw new Error(
-                '[ArchitectRuntime] Missing output root.'
-            );
-        }
-
-        this.renderer =
-            new ArchitectRenderer(
-                this.output
-            );
-
-        // ---------------------------------------------------------------------
-        // STATE
-        // ---------------------------------------------------------------------
-
-        this.lastPrompt =
-            '';
-
-        this.lastResponse =
-            null;
-
-        this.lastPatch =
-            null;
-
-        this.lastScan =
-            null;
-
-        this.isGenerating =
-            false;
-
-        this.isApplying =
-            false;
-
-        // ---------------------------------------------------------------------
-        // INIT
-        // ---------------------------------------------------------------------
-
-        this.init();
-    }
-
-    // -------------------------------------------------------------------------
-    // INIT
-    // -------------------------------------------------------------------------
-
-    init() {
-
-        this.bindUI();
-
-        this.renderer.renderEmpty();
-
-        console.log(
-            '🧠 ArchitectRuntime ready.'
+                error:
+                    'Method not allowed.'
+            }
         );
     }
 
     // -------------------------------------------------------------------------
-    // UI
+    // API KEY
     // -------------------------------------------------------------------------
 
-    bindUI() {
+    if (
+        !process.env.OPENAI_API_KEY
+    ) {
 
-        // GENERATE
+        return json(
+            response,
+            500,
+            {
 
-        if (this.generateBtn) {
+                ok: false,
 
-            this.generateBtn.addEventListener(
-                'click',
-                async () => {
-
-                    await this.handleGenerate();
-                }
-            );
-        }
-
-        // APPLY
-
-        if (this.applyBtn) {
-
-            this.applyBtn.addEventListener(
-                'click',
-                async () => {
-
-                    await this.handleApplyPatch();
-                }
-            );
-        }
+                error:
+                    'Missing OPENAI_API_KEY.'
+            }
+        );
     }
 
-    // -------------------------------------------------------------------------
-    // ASK ARCHITECT
-    // -------------------------------------------------------------------------
+    try {
 
-    async askArchitect(
-        prompt,
-        scanData = {}
-    ) {
+        // ---------------------------------------------------------------------
+        // BODY
+        // ---------------------------------------------------------------------
+
+        const body =
+            request.body || {};
+
+        const prompt =
+            clampInput(
+                body.prompt
+            );
+
+        const scan =
+            body.scan || {};
+
+        // ---------------------------------------------------------------------
+        // VALIDATION
+        // ---------------------------------------------------------------------
 
         if (!prompt) {
 
-            throw new Error(
-                'Architect prompt is empty.'
+            return json(
+                response,
+                400,
+                {
+
+                    ok: false,
+
+                    error:
+                        'Prompt is required.'
+                }
             );
         }
 
-        this.lastPrompt =
-            prompt;
+        // ---------------------------------------------------------------------
+        // OPENAI REQUEST
+        // ---------------------------------------------------------------------
 
-        this.lastScan =
-            scanData;
+        const aiResponse =
+            await client.responses.create({
 
-        try {
+                model:
+                    MODEL,
 
-            this.renderer.renderLoading(
-                'Connecting to Architect AI runtime...'
-            );
+                temperature:
+                    0.2,
 
-            const response =
-                await fetch(
-                    this.apiEndpoint,
+                max_output_tokens:
+                    4000,
+
+                input: [
+
                     {
-                        method: 'POST',
+                        role: 'system',
 
-                        headers: {
-                            'Content-Type':
-                                'application/json'
-                        },
+                        content:
+                            buildSystemPrompt()
+                    },
 
-                        body:
-                            JSON.stringify({
+                    {
+                        role: 'user',
+
+                        content:
+                            buildUserPrompt({
 
                                 prompt,
-
-                                scan:
-                                    scanData
+                                scan
                             })
                     }
-                );
+                ]
+            });
 
-            // -------------------------------------------------------------
-            // NETWORK FAILURE
-            // -------------------------------------------------------------
+        // ---------------------------------------------------------------------
+        // CONTENT
+        // ---------------------------------------------------------------------
 
-            if (!response.ok) {
-
-                const text =
-                    await response.text();
-
-                throw new Error(
-
-                    text ||
-
-                    `Architect API failed (${response.status}).`
-                );
-            }
-
-            // -------------------------------------------------------------
-            // JSON
-            // -------------------------------------------------------------
-
-            const data =
-                await response.json();
-
-            // -------------------------------------------------------------
-            // API FAILURE
-            // -------------------------------------------------------------
-
-            if (!data.ok) {
-
-                throw new Error(
-
-                    data.error ||
-
-                    'Architect API returned failure.'
-                );
-            }
-
-            // -------------------------------------------------------------
-            // NORMALIZE
-            // -------------------------------------------------------------
-
-            const normalized =
-                this.normalizeResponse(
-                    data
-                );
-
-            // -------------------------------------------------------------
-            // SAVE
-            // -------------------------------------------------------------
-
-            this.lastResponse =
-                normalized;
-
-            this.lastPatch =
-                normalized.patch || '';
-
-            // -------------------------------------------------------------
-            // RETURN
-            // -------------------------------------------------------------
-
-            return normalized;
-
-        } catch (err) {
-
-            console.error(
-                '[ArchitectRuntime] askArchitect failed:',
-                err
+        const rawText =
+            extractContent(
+                aiResponse
             );
 
-            throw err;
-        }
-    }
+        // ---------------------------------------------------------------------
+        // PARSE
+        // ---------------------------------------------------------------------
 
-    // -------------------------------------------------------------------------
-    // GENERATE
-    // -------------------------------------------------------------------------
-
-    async handleGenerate() {
-
-        if (this.isGenerating) {
-
-            return;
-        }
-
-        try {
-
-            this.isGenerating =
-                true;
-
-            const issue =
-                this.textarea?.value?.trim();
-
-            if (!issue) {
-
-                this.renderer.renderError(
-                    'Describe the issue first.'
-                );
-
-                return;
-            }
-
-            this.renderer.renderLoading(
-                'Generating AI repair patch...'
+        const parsed =
+            parseAIResponse(
+                rawText
             );
 
-            const result =
-                await this.askArchitect(
-                    issue,
-                    this.lastScan || {}
-                );
+        // ---------------------------------------------------------------------
+        // SUCCESS
+        // ---------------------------------------------------------------------
 
-            this.renderer.renderResponse(
-                result
-            );
-
-        } catch (err) {
-
-            console.error(
-                '[ArchitectRuntime] Generate failed:',
-                err
-            );
-
-            this.renderer.renderError(
-                err.message ||
-
-                'AI patch generation failed.'
-            );
-
-        } finally {
-
-            this.isGenerating =
-                false;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // APPLY PATCH
-    // -------------------------------------------------------------------------
-
-    async handleApplyPatch() {
-
-        if (this.isApplying) {
-
-            return;
-        }
-
-        try {
-
-            this.isApplying =
-                true;
-
-            // -------------------------------------------------------------
-            // CHECK
-            // -------------------------------------------------------------
-
-            if (!this.lastPatch) {
-
-                this.renderer.renderError(
-                    'No patch available to apply.'
-                );
-
-                return;
-            }
-
-            // -------------------------------------------------------------
-            // CONFIRM
-            // -------------------------------------------------------------
-
-            const confirmed =
-                window.confirm(
-                    'Apply AI-generated patch to project files?'
-                );
-
-            if (!confirmed) {
-
-                return;
-            }
-
-            // -------------------------------------------------------------
-            // LOADING
-            // -------------------------------------------------------------
-
-            this.renderer.renderLoading(
-                'Applying repair patch safely...'
-            );
-
-            // -------------------------------------------------------------
-            // REQUEST
-            // -------------------------------------------------------------
-
-            const response =
-                await fetch(
-                    this.applyEndpoint,
-                    {
-                        method: 'POST',
-
-                        headers: {
-                            'Content-Type':
-                                'application/json'
-                        },
-
-                        body:
-                            JSON.stringify({
-
-                                patch:
-                                    this.lastPatch
-                            })
-                    }
-                );
-
-            // -------------------------------------------------------------
-            // NETWORK FAILURE
-            // -------------------------------------------------------------
-
-            if (!response.ok) {
-
-                const text =
-                    await response.text();
-
-                throw new Error(
-
-                    text ||
-
-                    `Patch apply failed (${response.status}).`
-                );
-            }
-
-            // -------------------------------------------------------------
-            // JSON
-            // -------------------------------------------------------------
-
-            const result =
-                await response.json();
-
-            // -------------------------------------------------------------
-            // FAILURE
-            // -------------------------------------------------------------
-
-            if (!result.ok) {
-
-                throw new Error(
-
-                    result.error ||
-
-                    'Patch apply failed.'
-                );
-            }
-
-            // -------------------------------------------------------------
-            // SUCCESS
-            // -------------------------------------------------------------
-
-            this.renderer.renderApplySuccess(
-                result
-            );
-
-            console.log(
-                '✅ Patch applied:',
-                result
-            );
-
-        } catch (err) {
-
-            console.error(
-                '[ArchitectRuntime] Apply failed:',
-                err
-            );
-
-            this.renderer.renderError(
-                err.message ||
-
-                'Patch apply failed.'
-            );
-
-        } finally {
-
-            this.isApplying =
-                false;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // NORMALIZER
-    // -------------------------------------------------------------------------
-
-    normalizeResponse(data = {}) {
-
-        // -------------------------------------------------------------
-        // RAW STRING
-        // -------------------------------------------------------------
-
-        if (
-            typeof data ===
-            'string'
-        ) {
-
-            return {
+        return json(
+            response,
+            200,
+            {
 
                 ok: true,
 
-                summary:
-                    'AI response generated.',
-
-                analysis:
-                    data,
-
-                patch:
-                    ''
-            };
-        }
-
-        // -------------------------------------------------------------
-        // RAW FIELD
-        // -------------------------------------------------------------
-
-        if (data.raw) {
-
-            return {
-
-                ok: true,
+                model:
+                    MODEL,
 
                 summary:
-                    data.summary ||
+                    parsed.summary ||
 
                     'Architect analysis complete.',
 
                 analysis:
-                    data.analysis ||
+                    parsed.analysis ||
 
-                    data.raw,
+                    '',
 
                 patch:
-                    data.patch ||
+                    parsed.patch ||
 
                     '',
 
                 notes:
-                    data.notes ||
+                    parsed.notes ||
 
-                    ''
-            };
-        }
+                    '',
 
-        // -------------------------------------------------------------
-        // OPENAI FORMAT
-        // -------------------------------------------------------------
+                raw:
+                    rawText
+            }
+        );
 
-        if (
-            data.choices &&
-            Array.isArray(
-                data.choices
-            )
-        ) {
+    } catch (err) {
 
-            const content =
-                data.choices?.[0]
-                    ?.message
-                    ?.content || '';
+        console.error(
+            '[Architect API]',
+            err
+        );
 
-            return {
+        return json(
+            response,
+            500,
+            {
 
-                ok: true,
+                ok: false,
 
-                summary:
-                    'AI response generated.',
+                error:
+                    err?.message ||
 
-                analysis:
-                    content,
-
-                patch:
-                    ''
-            };
-        }
-
-        // -------------------------------------------------------------
-        // GENERIC
-        // -------------------------------------------------------------
-
-        return {
-
-            ok: true,
-
-            summary:
-                data.summary ||
-
-                'Architect runtime completed.',
-
-            analysis:
-                data.analysis ||
-
-                JSON.stringify(
-                    data,
-                    null,
-                    2
-                ),
-
-            patch:
-                data.patch ||
-
-                '',
-
-            notes:
-                data.notes ||
-
-                ''
-        };
-    }
-
-    // -------------------------------------------------------------------------
-    // PUBLIC
-    // -------------------------------------------------------------------------
-
-    getLastPatch() {
-
-        return this.lastPatch;
-    }
-
-    getLastResponse() {
-
-        return this.lastResponse;
-    }
-
-    getLastScan() {
-
-        return this.lastScan;
-    }
-
-    clear() {
-
-        this.lastPatch =
-            null;
-
-        this.lastResponse =
-            null;
-
-        this.renderer.renderEmpty();
+                    'Architect runtime failure.'
+            }
+        );
     }
 }
