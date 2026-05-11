@@ -1,265 +1,407 @@
 // /devtools/architect/architect_prompt_builder.js
+// -----------------------------------------------------------------------------
 // Symbiote Studio — Architect Prompt Builder
-// Converts runtime scan into structured AI debugging prompt
+// Structured AI Runtime Prompt System
+// -----------------------------------------------------------------------------
 
-export function createPromptBuilder() {
+// -----------------------------------------------------------------------------
+// CONFIG
+// -----------------------------------------------------------------------------
 
-    function build({
-        userPrompt = '',
-        scan = {}
-    } = {}) {
+const MAX_SECTION_LENGTH =
+    12000;
 
-        // =================================================
-        // SAFETY
-        // =================================================
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
 
-        const safePrompt =
-            typeof userPrompt === 'string'
-                ? userPrompt.trim()
-                : '';
+function sanitize(value) {
 
-        const runtime =
-            scan.runtime || {};
+    return String(
+        value ?? ''
+    )
+        .replace(/\r/g, '')
+        .trim();
+}
 
-        const dom =
-            scan.dom || {};
+function truncate(
+    value,
+    max = MAX_SECTION_LENGTH
+) {
 
-        const audio =
-            scan.audio || {};
+    const text =
+        sanitize(value);
 
-        const errors =
-            Array.isArray(scan.errors)
-                ? scan.errors
-                : [];
+    if (
+        text.length <= max
+    ) {
 
-        const warnings =
-            Array.isArray(scan.warnings)
-                ? scan.warnings
-                : [];
-
-        const experts =
-            Array.isArray(scan.experts)
-                ? scan.experts
-                : [];
-
-        // =================================================
-        // ERROR FORMAT
-        // =================================================
-
-        const formattedErrors =
-            errors.length
-                ? errors.map((err, index) => {
-
-                    return `
-[ERROR ${index + 1}]
-Message:
-${err.message || 'Unknown error'}
-
-Stack:
-${err.stack || 'No stack'}
-
-File:
-${err.filename || 'Unknown'}
-
-Line:
-${err.lineno || 'Unknown'}
-                    `.trim();
-
-                }).join('\n\n')
-                : 'No runtime errors captured.';
-
-        // =================================================
-        // WARNING FORMAT
-        // =================================================
-
-        const formattedWarnings =
-            warnings.length
-                ? warnings.map((warn, index) => {
-
-                    return `
-[WARNING ${index + 1}]
-${typeof warn === 'string'
-    ? warn
-    : JSON.stringify(warn, null, 2)}
-                    `.trim();
-
-                }).join('\n\n')
-                : 'No warnings captured.';
-
-        // =================================================
-        // EXPERT FORMAT
-        // =================================================
-
-        const formattedExperts =
-            experts.length
-                ? experts.map((expert, index) => {
-
-                    return `
-[EXPERT ${index + 1}]
-Type: ${expert.type || 'Unknown'}
-ID: ${expert.id || 'Unknown'}
-State: ${expert.state || 'Unknown'}
-                    `.trim();
-
-                }).join('\n\n')
-                : 'No experts mounted.';
-
-        // =================================================
-        // DOM SUMMARY
-        // =================================================
-
-        const domSummary = `
-DOM SUMMARY
------------
-Expert Cards:
-${dom.expertCards ?? 'Unknown'}
-
-Range Sliders:
-${dom.rangeSliders ?? 'Unknown'}
-
-Buttons:
-${dom.buttons ?? 'Unknown'}
-
-Modals:
-${dom.modals ?? 'Unknown'}
-
-Body Scroll Height:
-${dom.scrollHeight ?? 'Unknown'}
-
-Viewport:
-${dom.viewportWidth ?? '?'} x ${dom.viewportHeight ?? '?'}
-        `.trim();
-
-        // =================================================
-        // AUDIO SUMMARY
-        // =================================================
-
-        const audioSummary = `
-AUDIO SUMMARY
--------------
-AudioContext Supported:
-${audio.supported ?? false}
-
-AudioContext State:
-${audio.state || 'Unknown'}
-
-Sample Rate:
-${audio.sampleRate || 'Unknown'}
-
-Destination Channels:
-${audio.destinationChannels || 'Unknown'}
-
-Active Nodes:
-${audio.activeNodes || 'Unknown'}
-        `.trim();
-
-        // =================================================
-        // RUNTIME SUMMARY
-        // =================================================
-
-        const runtimeSummary = `
-RUNTIME SUMMARY
----------------
-URL:
-${runtime.url || 'Unknown'}
-
-User Agent:
-${runtime.userAgent || 'Unknown'}
-
-Platform:
-${runtime.platform || 'Unknown'}
-
-Language:
-${runtime.language || 'Unknown'}
-
-Device Memory:
-${runtime.deviceMemory || 'Unknown'}
-
-Hardware Concurrency:
-${runtime.hardwareConcurrency || 'Unknown'}
-        `.trim();
-
-        // =================================================
-        // FINAL PROMPT
-        // =================================================
-
-        const finalPrompt = `
-You are debugging Symbiote Studio.
-
-PROJECT TYPE:
-Modular procedural atmospheric audio engine
-using Web Audio API.
-
-USER ISSUE:
-${safePrompt}
-
-==================================================
-RUNTIME SUMMARY
-==================================================
-
-${runtimeSummary}
-
-==================================================
-DOM SUMMARY
-==================================================
-
-${domSummary}
-
-==================================================
-AUDIO SUMMARY
-==================================================
-
-${audioSummary}
-
-==================================================
-ACTIVE EXPERTS
-==================================================
-
-${formattedExperts}
-
-==================================================
-WARNINGS
-==================================================
-
-${formattedWarnings}
-
-==================================================
-ERRORS
-==================================================
-
-${formattedErrors}
-
-==================================================
-INSTRUCTIONS
-==================================================
-
-1. Find the REAL root cause.
-2. Mention exact broken files.
-3. Mention exact broken methods if possible.
-4. Explain WHY the issue is happening.
-5. Return production-grade fixes.
-6. Preserve architecture.
-7. Prefer surgical fixes over rewrites.
-8. Detect constructor mismatches.
-9. Detect import/export mismatches.
-10. Detect dead UI listeners.
-11. Detect async timing issues.
-12. Detect WebAudio lifecycle issues.
-13. Detect slider-binding failures.
-14. Return FULL corrected code blocks when needed.
-15. Avoid generic advice.
-
-END OF DEBUG PAYLOAD.
-        `.trim();
-
-        return finalPrompt;
+        return text;
     }
 
-    // =====================================================
-    // API
-    // =====================================================
-
-    return {
-        build
-    };
+    return (
+        text.slice(
+            0,
+            max
+        ) + '\n...[truncated]'
+    );
 }
+
+function safeJson(value) {
+
+    try {
+
+        return JSON.stringify(
+            value,
+            null,
+            2
+        );
+
+    } catch {
+
+        return '[Unserializable Value]';
+    }
+}
+
+// -----------------------------------------------------------------------------
+// SECTION
+// -----------------------------------------------------------------------------
+
+function createSection(
+    title,
+    content
+) {
+
+    return `
+===============================================================================
+${title.toUpperCase()}
+===============================================================================
+
+${content}
+`;
+}
+
+// -----------------------------------------------------------------------------
+// FORMATTERS
+// -----------------------------------------------------------------------------
+
+function formatRuntime(scan = {}) {
+
+    return truncate(
+        safeJson(
+            scan.runtime || {}
+        )
+    );
+}
+
+function formatPerformance(scan = {}) {
+
+    return truncate(
+        safeJson(
+            scan.performance || {}
+        )
+    );
+}
+
+function formatDOM(scan = {}) {
+
+    return truncate(
+        safeJson(
+            scan.dom || {}
+        )
+    );
+}
+
+function formatAudio(scan = {}) {
+
+    return truncate(
+        safeJson(
+            scan.audio || {}
+        )
+    );
+}
+
+function formatExperts(scan = {}) {
+
+    const experts =
+        Array.isArray(
+            scan.experts
+        )
+            ? scan.experts
+            : [];
+
+    if (!experts.length) {
+
+        return 'No active experts detected.';
+    }
+
+    return truncate(
+        safeJson(
+            experts
+        )
+    );
+}
+
+function formatFiles(scan = {}) {
+
+    const files =
+        Array.isArray(
+            scan.files
+        )
+            ? scan.files
+            : [];
+
+    if (!files.length) {
+
+        return 'No loaded scripts detected.';
+    }
+
+    return truncate(
+        files.join('\n')
+    );
+}
+
+function formatConsole(scan = {}) {
+
+    const logs =
+        Array.isArray(
+            scan.console
+        )
+            ? scan.console
+            : [];
+
+    if (!logs.length) {
+
+        return 'No console logs captured.';
+    }
+
+    return truncate(
+        logs.join('\n\n')
+    );
+}
+
+function formatErrors(scan = {}) {
+
+    const errors =
+        Array.isArray(
+            scan.errors
+        )
+            ? scan.errors
+            : [];
+
+    if (!errors.length) {
+
+        return 'No runtime errors detected.';
+    }
+
+    return truncate(
+        errors.join('\n\n')
+    );
+}
+
+// -----------------------------------------------------------------------------
+// SYSTEM RULES
+// -----------------------------------------------------------------------------
+
+function createSystemInstructions() {
+
+    return `
+You are Architect AI.
+
+You are a senior runtime systems engineer working on:
+
+"Symbiote Studio · MoE World Model"
+
+PRIMARY OBJECTIVE:
+- analyze runtime failures
+- identify root causes
+- generate safe production-grade fixes
+- preserve existing architecture
+- preserve mobile-first design
+- avoid destructive rewrites
+- avoid fake placeholders
+- avoid pseudo-code
+
+IMPORTANT RULES:
+
+1. Prefer minimal targeted fixes.
+2. Never remove unrelated functionality.
+3. Never generate incomplete code.
+4. Preserve runtime stability.
+5. Preserve glassmorphism design language.
+6. Preserve existing imports unless broken.
+7. Avoid speculative changes.
+8. Keep patches compact and surgical.
+9. Do not explain obvious JavaScript basics.
+10. If uncertain, explain uncertainty safely.
+
+PATCH FORMAT RULES:
+
+If generating file patches,
+you MUST return patches in EXACT format:
+
+<<<FILE:path/to/file.js
+FULL FILE CONTENT HERE
+>>>END_FILE
+
+MULTI FILE EXAMPLE:
+
+<<<FILE:src/example.js
+console.log('hello');
+>>>END_FILE
+
+<<<FILE:styles/app.css
+body {
+  background: black;
+}
+>>>END_FILE
+
+IMPORTANT:
+- Always include FULL file contents.
+- Never return partial diffs.
+- Never use markdown code fences.
+- Never wrap patch in triple backticks.
+- Never omit file paths.
+- Never return prose inside patch blocks.
+
+RESPONSE STRUCTURE:
+
+1. Root cause analysis
+2. Runtime diagnosis
+3. Safe repair strategy
+4. Production-ready patch blocks
+5. Additional implementation notes if needed
+`;
+}
+
+// -----------------------------------------------------------------------------
+// MAIN BUILDER
+// -----------------------------------------------------------------------------
+
+export function buildArchitectPrompt(
+    payload = {}
+) {
+
+    const userPrompt =
+        sanitize(
+            payload.userPrompt ||
+            payload.issue ||
+            ''
+        );
+
+    const scan =
+        payload.scan || {};
+
+    // -------------------------------------------------------------------------
+    // PROMPT
+    // -------------------------------------------------------------------------
+
+    const prompt = `
+
+${createSection(
+    'SYSTEM INSTRUCTIONS',
+    createSystemInstructions()
+)}
+
+${createSection(
+    'USER ISSUE',
+    userPrompt || 'No issue provided.'
+)}
+
+${createSection(
+    'RUNTIME OVERVIEW',
+    formatRuntime(scan)
+)}
+
+${createSection(
+    'PERFORMANCE SNAPSHOT',
+    formatPerformance(scan)
+)}
+
+${createSection(
+    'DOM SNAPSHOT',
+    formatDOM(scan)
+)}
+
+${createSection(
+    'AUDIO STATE',
+    formatAudio(scan)
+)}
+
+${createSection(
+    'ACTIVE EXPERTS',
+    formatExperts(scan)
+)}
+
+${createSection(
+    'LOADED FILES',
+    formatFiles(scan)
+)}
+
+${createSection(
+    'CONSOLE LOGS',
+    formatConsole(scan)
+)}
+
+${createSection(
+    'RUNTIME ERRORS',
+    formatErrors(scan)
+)}
+
+${createSection(
+    'RESPONSE REQUIREMENTS',
+`
+Return:
+
+1. Short runtime summary
+2. Root cause analysis
+3. Safe repair explanation
+4. Structured patch blocks
+5. Optional implementation notes
+
+DO NOT:
+- use markdown fences
+- explain generic concepts
+- generate placeholder code
+- invent fake APIs
+- remove unrelated logic
+
+PATCH FORMAT MUST BE:
+
+<<<FILE:path/to/file.js
+FULL FILE CONTENT
+>>>END_FILE
+`
+)}
+
+`;
+
+    return truncate(
+        prompt,
+        100000
+    );
+}
+
+// -----------------------------------------------------------------------------
+// GENERIC BUILD
+// -----------------------------------------------------------------------------
+
+export function build(
+    payload = {}
+) {
+
+    return buildArchitectPrompt(
+        payload
+    );
+}
+
+// -----------------------------------------------------------------------------
+// DEFAULT EXPORT
+// -----------------------------------------------------------------------------
+
+export default {
+
+    build,
+
+    buildArchitectPrompt
+};
