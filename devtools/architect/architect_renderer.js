@@ -1,490 +1,86 @@
-// devtools/architect/architect_renderer.js
+// /devtools/architect/architect_renderer.js
 // -----------------------------------------------------------------------------
 // Symbiote Studio — Architect Renderer
-// Phase 2: Patch Preview + Apply Feedback UI
+// Premium Runtime Workspace Renderer
 // -----------------------------------------------------------------------------
 
 export default class ArchitectRenderer {
 
-    constructor(root) {
+    // -------------------------------------------------------------------------
+    // CONSTRUCTOR
+    // -------------------------------------------------------------------------
 
-        if (!root) {
+    constructor(rootElement) {
+
+        if (!rootElement) {
 
             throw new Error(
-                'ArchitectRenderer requires root element.'
+                '[ArchitectRenderer] Missing root element.'
             );
         }
 
-        this.root = root;
+        this.root =
+            rootElement;
+
+        console.log(
+            '🧠 ArchitectRenderer ready.'
+        );
     }
 
     // -------------------------------------------------------------------------
-    // PATCH RESULT
+    // INTERNAL
     // -------------------------------------------------------------------------
 
-    renderPatchResult(result) {
+    clear() {
 
-        if (!result) {
+        this.root.innerHTML =
+            '';
+    }
 
-            return this.renderError(
-                'Empty patch result.'
+    sanitize(value) {
+
+        return String(
+            value ?? ''
+        )
+            .replaceAll(
+                '&',
+                '&amp;'
+            )
+            .replaceAll(
+                '<',
+                '&lt;'
+            )
+            .replaceAll(
+                '>',
+                '&gt;'
             );
-        }
-
-        if (!result.ok) {
-
-            return this.renderError(
-                result.error ||
-                'Unknown patch error.'
-            );
-        }
-
-        const patch =
-            result.patch;
-
-        const summary =
-            patch.summary ||
-            'Unnamed Patch';
-
-        const risk =
-            patch.risk ||
-            'unknown';
-
-        const files =
-            Array.isArray(
-                patch.files
-            )
-                ? patch.files
-                : [];
-
-        this.root.innerHTML = `
-            <div class="architect-result">
-
-                ${this.renderHeader(
-                    summary,
-                    risk,
-                    files.length
-                )}
-
-                <div class="architect-files">
-
-                    ${files.map(
-                        (file, index) =>
-                            this.renderFilePatch(
-                                file,
-                                index
-                            )
-                    ).join('')}
-
-                </div>
-
-                <div class="
-                    architect-warning-box
-                ">
-                    <div class="
-                        architect-warning-title
-                    ">
-                        Safe Apply Mode
-                    </div>
-
-                    <div class="
-                        architect-warning-text
-                    ">
-                        Snapshots will be created
-                        automatically before any
-                        file modifications.
-                    </div>
-                </div>
-
-            </div>
-        `;
     }
 
-    // -------------------------------------------------------------------------
-    // HEADER
-    // -------------------------------------------------------------------------
-
-    renderHeader(
-        summary,
-        risk,
-        operations
-    ) {
+    section(title, body) {
 
         return `
-            <div class="
-                architect-header
-            ">
+            <section class="architect-section">
 
-                <div class="
-                    architect-summary
-                ">
-                    ${this.escape(summary)}
+                <div class="architect-section-title">
+                    ${this.sanitize(title)}
                 </div>
 
-                <div class="
-                    architect-risk
-                    architect-risk-${risk}
-                ">
-                    ${this.escape(risk)}
-                </div>
+                <pre class="architect-pre">${body}</pre>
 
-            </div>
-
-            <div class="
-                architect-meta
-            ">
-
-                <div class="
-                    architect-meta-item
-                ">
-                    Operations:
-                    <strong>
-                        ${operations}
-                    </strong>
-                </div>
-
-            </div>
+            </section>
         `;
     }
 
-    // -------------------------------------------------------------------------
-    // FILE PATCH
-    // -------------------------------------------------------------------------
-
-    renderFilePatch(
-        file,
-        index
-    ) {
-
-        const path =
-            file.path ||
-            'unknown';
-
-        const operation =
-            file.operation ||
-            'unknown';
-
-        const find =
-            file.find || '';
-
-        const replace =
-            file.replace || '';
-
-        const content =
-            file.content || '';
+    codeBlock(title, code) {
 
         return `
-            <div class="
-                architect-file-card
-            ">
+            <div class="architect-code-wrap">
 
-                <div class="
-                    architect-file-top
-                ">
-
-                    <div class="
-                        architect-file-path
-                    ">
-                        ${this.escape(path)}
-                    </div>
-
-                    <div class="
-                        architect-operation
-                        architect-operation-${operation}
-                    ">
-                        ${this.escape(operation)}
-                    </div>
-
+                <div class="architect-code-header">
+                    ${this.sanitize(title)}
                 </div>
 
-                ${find
-                    ? this.renderDiffBlock(
-                        'Find',
-                        find,
-                        'find'
-                    )
-                    : ''
-                }
-
-                ${replace
-                    ? this.renderDiffBlock(
-                        'Replace',
-                        replace,
-                        'replace'
-                    )
-                    : ''
-                }
-
-                ${content
-                    ? this.renderDiffBlock(
-                        'Content',
-                        content,
-                        'content'
-                    )
-                    : ''
-                }
-
-            </div>
-        `;
-    }
-
-    // -------------------------------------------------------------------------
-    // DIFF BLOCK
-    // -------------------------------------------------------------------------
-
-    renderDiffBlock(
-        label,
-        code,
-        type
-    ) {
-
-        return `
-            <div class="
-                architect-diff
-                architect-diff-${type}
-            ">
-
-                <div class="
-                    architect-diff-label
-                ">
-                    ${this.escape(label)}
-                </div>
-
-                <pre class="
-                    architect-code
-                "><code>${this.escape(code)}</code></pre>
-
-            </div>
-        `;
-    }
-
-    // -------------------------------------------------------------------------
-    // APPLY SUCCESS
-    // -------------------------------------------------------------------------
-
-    renderApplySuccess(result) {
-
-        const operations =
-            result.totalOperations || 0;
-
-        const successCount =
-            result.successCount || 0;
-
-        const failedCount =
-            result.failedCount || 0;
-
-        const snapshots =
-            Array.isArray(
-                result.snapshots
-            )
-                ? result.snapshots
-                : [];
-
-        const patchResults =
-            Array.isArray(
-                result.results
-            )
-                ? result.results
-                : [];
-
-        this.root.innerHTML = `
-            <div class="
-                architect-apply-success
-            ">
-
-                <div class="
-                    architect-success-title
-                ">
-                    ✅ Patch Applied
-                </div>
-
-                <div class="
-                    architect-success-summary
-                ">
-                    ${this.escape(
-                        result.summary ||
-                        'Patch applied successfully.'
-                    )}
-                </div>
-
-                <div class="
-                    architect-apply-stats
-                ">
-
-                    <div class="
-                        architect-stat-card
-                    ">
-                        <div class="
-                            architect-stat-label
-                        ">
-                            Operations
-                        </div>
-
-                        <div class="
-                            architect-stat-value
-                        ">
-                            ${operations}
-                        </div>
-                    </div>
-
-                    <div class="
-                        architect-stat-card
-                    ">
-                        <div class="
-                            architect-stat-label
-                        ">
-                            Success
-                        </div>
-
-                        <div class="
-                            architect-stat-value
-                        ">
-                            ${successCount}
-                        </div>
-                    </div>
-
-                    <div class="
-                        architect-stat-card
-                    ">
-                        <div class="
-                            architect-stat-label
-                        ">
-                            Failed
-                        </div>
-
-                        <div class="
-                            architect-stat-value
-                        ">
-                            ${failedCount}
-                        </div>
-                    </div>
-
-                </div>
-
-                <div class="
-                    architect-results-list
-                ">
-
-                    ${patchResults.map(
-                        (entry) => `
-                            <div class="
-                                architect-result-item
-                            ">
-
-                                <div class="
-                                    architect-result-path
-                                ">
-                                    ${this.escape(
-                                        entry.path ||
-                                        'unknown'
-                                    )}
-                                </div>
-
-                                <div class="
-                                    architect-result-status
-                                    ${entry.ok
-                                        ? 'success'
-                                        : 'failed'
-                                    }
-                                ">
-                                    ${entry.ok
-                                        ? 'Applied'
-                                        : 'Failed'
-                                    }
-                                </div>
-
-                            </div>
-                        `
-                    ).join('')}
-
-                </div>
-
-                ${snapshots.length > 0
-                    ? `
-                        <div class="
-                            architect-snapshot-box
-                        ">
-
-                            <div class="
-                                architect-snapshot-title
-                            ">
-                                Snapshots Created
-                            </div>
-
-                            <div class="
-                                architect-snapshot-list
-                            ">
-
-                                ${snapshots.map(
-                                    (snapshot) => `
-                                        <div class="
-                                            architect-snapshot-item
-                                        ">
-                                            ${this.escape(snapshot)}
-                                        </div>
-                                    `
-                                ).join('')}
-
-                            </div>
-
-                        </div>
-                    `
-                    : ''
-                }
-
-            </div>
-        `;
-    }
-
-    // -------------------------------------------------------------------------
-    // LOADING
-    // -------------------------------------------------------------------------
-
-    renderLoading(
-        message = 'Scanning runtime...'
-    ) {
-
-        this.root.innerHTML = `
-            <div class="
-                architect-loading
-            ">
-
-                <div class="
-                    architect-spinner
-                "></div>
-
-                <div class="
-                    architect-loading-text
-                ">
-                    ${this.escape(message)}
-                </div>
-
-            </div>
-        `;
-    }
-
-    // -------------------------------------------------------------------------
-    // ERROR
-    // -------------------------------------------------------------------------
-
-    renderError(message) {
-
-        this.root.innerHTML = `
-            <div class="
-                architect-error
-            ">
-
-                <div class="
-                    architect-error-title
-                ">
-                    Architect Runtime Error
-                </div>
-
-                <div class="
-                    architect-error-message
-                ">
-                    ${this.escape(message)}
-                </div>
+                <pre class="architect-code-block">${this.sanitize(code)}</pre>
 
             </div>
         `;
@@ -497,22 +93,19 @@ export default class ArchitectRenderer {
     renderEmpty() {
 
         this.root.innerHTML = `
-            <div class="
-                architect-empty
-            ">
+            <div class="architect-placeholder">
 
-                <div class="
-                    architect-empty-title
-                ">
+                <div class="architect-placeholder-icon">
+                    ✦
+                </div>
+
+                <div class="architect-placeholder-title">
                     Architect Runtime Ready
                 </div>
 
-                <div class="
-                    architect-empty-subtitle
-                ">
-                    Describe a project issue
-                    to generate structured
-                    AI repair patches.
+                <div class="architect-placeholder-text">
+                    Describe a runtime issue to generate
+                    structured AI repair patches.
                 </div>
 
             </div>
@@ -520,16 +113,465 @@ export default class ArchitectRenderer {
     }
 
     // -------------------------------------------------------------------------
-    // ESCAPE
+    // LOADING
     // -------------------------------------------------------------------------
 
-    escape(value) {
+    renderLoading(message = 'Loading...') {
 
-        return String(value)
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
+        this.root.innerHTML = `
+            <div class="architect-loading">
+
+                <div class="architect-spinner"></div>
+
+                <div class="architect-loading-text">
+                    ${this.sanitize(message)}
+                </div>
+
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // ERROR
+    // -------------------------------------------------------------------------
+
+    renderError(error) {
+
+        const message =
+            error?.message ||
+            String(error) ||
+            'Unknown renderer error.';
+
+        this.root.innerHTML = `
+            <div class="architect-error">
+
+                <div class="architect-error-title">
+                    Architect Runtime Error
+                </div>
+
+                <pre class="architect-error-body">${this.sanitize(message)}</pre>
+
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------------------------
+
+    renderResponse(response) {
+
+        try {
+
+            const normalized =
+                this.normalizeAIResponse(
+                    response
+                );
+
+            const summary =
+                normalized.summary ||
+                'AI repair response generated successfully.';
+
+            const analysis =
+                normalized.analysis ||
+                'No analysis provided.';
+
+            const patch =
+                normalized.patch ||
+                '';
+
+            const notes =
+                normalized.notes ||
+                '';
+
+            this.root.innerHTML = `
+                <div class="architect-report">
+
+                    <!-- HEADER -->
+
+                    <section class="architect-section">
+
+                        <div class="architect-section-title">
+                            AI Runtime Analysis
+                        </div>
+
+                        <div class="architect-response-text">
+
+                            ${this.sanitize(summary)}
+
+                        </div>
+
+                    </section>
+
+                    <!-- ANALYSIS -->
+
+                    ${this.section(
+                        'Analysis',
+                        this.sanitize(
+                            analysis
+                        )
+                    )}
+
+                    <!-- PATCH -->
+
+                    ${
+                        patch
+                            ? this.codeBlock(
+                                'Generated Patch',
+                                patch
+                            )
+                            : ''
+                    }
+
+                    <!-- NOTES -->
+
+                    ${
+                        notes
+                            ? this.section(
+                                'Additional Notes',
+                                this.sanitize(
+                                    notes
+                                )
+                            )
+                            : ''
+                    }
+
+                </div>
+            `;
+
+        } catch (err) {
+
+            console.error(
+                '[ArchitectRenderer] renderResponse failed:',
+                err
+            );
+
+            this.renderError(
+                err
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SCAN RESULT
+    // -------------------------------------------------------------------------
+
+    renderScanResult(scanResult = {}) {
+
+        try {
+
+            const runtimeErrors =
+                Array.isArray(
+                    scanResult.errors
+                )
+                    ? scanResult.errors
+                    : [];
+
+            const consoleLogs =
+                Array.isArray(
+                    scanResult.console
+                )
+                    ? scanResult.console
+                    : [];
+
+            const files =
+                Array.isArray(
+                    scanResult.files
+                )
+                    ? scanResult.files
+                    : [];
+
+            const dom =
+                scanResult.dom ||
+                {};
+
+            this.root.innerHTML = `
+                <div class="architect-report">
+
+                    <!-- HEADER -->
+
+                    <section class="architect-section">
+
+                        <div class="architect-section-title">
+                            Runtime Scan Complete
+                        </div>
+
+                        <div class="architect-response-text">
+
+                            Runtime inspection completed successfully.
+
+                        </div>
+
+                    </section>
+
+                    <!-- ERRORS -->
+
+                    ${this.section(
+                        'Runtime Errors',
+                        runtimeErrors.length
+                            ? runtimeErrors
+                                .map((item) =>
+                                    typeof item ===
+                                    'string'
+                                        ? item
+                                        : JSON.stringify(
+                                            item,
+                                            null,
+                                            2
+                                        )
+                                )
+                                .join('\n\n')
+                            : 'No runtime errors detected.'
+                    )}
+
+                    <!-- FILES -->
+
+                    ${this.section(
+                        'Scanned Files',
+                        files.length
+                            ? files.join('\n')
+                            : 'No file metadata available.'
+                    )}
+
+                    <!-- CONSOLE -->
+
+                    ${this.section(
+                        'Console Output',
+                        consoleLogs.length
+                            ? consoleLogs
+                                .map((item) =>
+                                    typeof item ===
+                                    'string'
+                                        ? item
+                                        : JSON.stringify(
+                                            item,
+                                            null,
+                                            2
+                                        )
+                                )
+                                .join('\n\n')
+                            : 'No console logs captured.'
+                    )}
+
+                    <!-- DOM -->
+
+                    ${this.section(
+                        'DOM Snapshot',
+                        JSON.stringify(
+                            dom,
+                            null,
+                            2
+                        )
+                    )}
+
+                </div>
+            `;
+
+        } catch (err) {
+
+            console.error(
+                '[ArchitectRenderer] renderScanResult failed:',
+                err
+            );
+
+            this.renderError(
+                err
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // PATCH RESULT
+    // -------------------------------------------------------------------------
+
+    renderPatchResult(result = {}) {
+
+        try {
+
+            const patch =
+                result.patch ||
+                result.raw ||
+                '';
+
+            const summary =
+                result.summary ||
+                'AI patch generated successfully.';
+
+            this.root.innerHTML = `
+                <div class="architect-report">
+
+                    <section class="architect-section">
+
+                        <div class="architect-section-title">
+                            Patch Generation Complete
+                        </div>
+
+                        <div class="architect-response-text">
+
+                            ${this.sanitize(summary)}
+
+                        </div>
+
+                    </section>
+
+                    ${this.codeBlock(
+                        'Patch Output',
+                        patch
+                    )}
+
+                </div>
+            `;
+
+        } catch (err) {
+
+            console.error(
+                '[ArchitectRenderer] renderPatchResult failed:',
+                err
+            );
+
+            this.renderError(
+                err
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // APPLY SUCCESS
+    // -------------------------------------------------------------------------
+
+    renderApplySuccess(result = {}) {
+
+        const message =
+            result.message ||
+            'Patch applied successfully.';
+
+        const files =
+            Array.isArray(
+                result.files
+            )
+                ? result.files.join(
+                    '\n'
+                )
+                : 'No modified file list available.';
+
+        this.root.innerHTML = `
+            <div class="architect-report">
+
+                <section class="architect-section">
+
+                    <div class="architect-section-title">
+                        Patch Applied
+                    </div>
+
+                    <div class="architect-response-text">
+
+                        ${this.sanitize(message)}
+
+                    </div>
+
+                </section>
+
+                ${this.section(
+                    'Modified Files',
+                    this.sanitize(
+                        files
+                    )
+                )}
+
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // NORMALIZER
+    // -------------------------------------------------------------------------
+
+    normalizeAIResponse(response) {
+
+        // STRING RESPONSE
+
+        if (
+            typeof response ===
+            'string'
+        ) {
+
+            return {
+
+                summary:
+                    'AI response received.',
+
+                analysis:
+                    response,
+
+                patch:
+                    ''
+            };
+        }
+
+        // NULL SAFETY
+
+        if (!response) {
+
+            return {
+
+                summary:
+                    'Empty AI response.',
+
+                analysis:
+                    '',
+
+                patch:
+                    ''
+            };
+        }
+
+        // RAW FORMAT
+
+        if (response.raw) {
+
+            return {
+
+                summary:
+                    response.summary ||
+                    'AI response generated.',
+
+                analysis:
+                    response.analysis ||
+                    response.raw,
+
+                patch:
+                    response.patch ||
+                    '',
+
+                notes:
+                    response.notes ||
+                    ''
+            };
+        }
+
+        // GENERIC OBJECT
+
+        return {
+
+            summary:
+                response.summary ||
+                'AI runtime response generated.',
+
+            analysis:
+                response.analysis ||
+                JSON.stringify(
+                    response,
+                    null,
+                    2
+                ),
+
+            patch:
+                response.patch ||
+                '',
+
+            notes:
+                response.notes ||
+                ''
+        };
     }
 }
