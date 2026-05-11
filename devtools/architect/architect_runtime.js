@@ -1,20 +1,11 @@
 // /devtools/architect/architect_runtime.js
 // -----------------------------------------------------------------------------
 // Symbiote Studio — Architect Runtime
-// Stable Runtime Edition
+// Premium AI Runtime Engine
 // -----------------------------------------------------------------------------
-
-import ArchitectPatchEngine
-from './architect_patch_engine.js';
 
 import ArchitectRenderer
 from './architect_renderer.js';
-
-import * as ScannerModule
-from './architect_scanner.js';
-
-import * as PromptBuilder
-from './architect_prompt_builder.js';
 
 // -----------------------------------------------------------------------------
 // MAIN
@@ -22,9 +13,9 @@ from './architect_prompt_builder.js';
 
 export default class ArchitectRuntime {
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // CONSTRUCTOR
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
     constructor(config = {}) {
 
@@ -41,15 +32,11 @@ export default class ArchitectRuntime {
             '/api/apply-patch';
 
         // ---------------------------------------------------------------------
-        // ROOT
+        // DOM
         // ---------------------------------------------------------------------
 
         this.root =
             config.root || null;
-
-        // ---------------------------------------------------------------------
-        // DOM
-        // ---------------------------------------------------------------------
 
         this.output =
             config.output || null;
@@ -67,50 +54,35 @@ export default class ArchitectRuntime {
             config.applyBtn || null;
 
         // ---------------------------------------------------------------------
-        // ENGINE
-        // ---------------------------------------------------------------------
-
-        this.patchEngine =
-            new ArchitectPatchEngine();
-
-        // ---------------------------------------------------------------------
         // RENDERER
         // ---------------------------------------------------------------------
 
-        this.renderer = null;
+        if (!this.output) {
 
-        if (!this.root) {
-
-            console.warn(
-                '[ArchitectRuntime] No root element provided.'
+            throw new Error(
+                '[ArchitectRuntime] Missing output root.'
             );
-
-        } else {
-
-            try {
-
-                this.renderer =
-                    new ArchitectRenderer(
-                        this.output
-                    );
-
-            } catch (err) {
-
-                console.error(
-                    '[ArchitectRuntime] Renderer init failed:',
-                    err
-                );
-            }
         }
+
+        this.renderer =
+            new ArchitectRenderer(
+                this.output
+            );
 
         // ---------------------------------------------------------------------
         // STATE
         // ---------------------------------------------------------------------
 
-        this.lastScan =
+        this.lastPrompt =
+            '';
+
+        this.lastResponse =
             null;
 
         this.lastPatch =
+            null;
+
+        this.lastScan =
             null;
 
         this.isGenerating =
@@ -126,127 +98,28 @@ export default class ArchitectRuntime {
         this.init();
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // INIT
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
     init() {
 
         this.bindUI();
 
-        this.safeRenderEmpty();
+        this.renderer.renderEmpty();
 
         console.log(
-            '🧠 Architect Runtime ready.'
+            '🧠 ArchitectRuntime ready.'
         );
     }
 
-    // =========================================================================
-    // SAFE RENDER HELPERS
-    // =========================================================================
-
-    safeRenderEmpty() {
-
-        if (
-            this.renderer &&
-            typeof this.renderer.renderEmpty ===
-            'function'
-        ) {
-
-            this.renderer.renderEmpty();
-        }
-    }
-
-    safeRenderLoading(message) {
-
-        if (
-            this.renderer &&
-            typeof this.renderer.renderLoading ===
-            'function'
-        ) {
-
-            this.renderer.renderLoading(
-                this.output,
-                message
-            );
-        }
-    }
-
-    safeRenderError(message) {
-
-        if (
-            this.renderer &&
-            typeof this.renderer.renderError ===
-            'function'
-        ) {
-
-            this.renderer.renderError(
-                this.output,
-                message
-            );
-        }
-
-        console.error(message);
-    }
-
-    safeRenderPatch(parsed) {
-
-        if (
-            this.renderer &&
-            typeof
-            this.renderer
-            .renderPatchResult ===
-            'function'
-        ) {
-
-            this.renderer.renderPatchResult(
-                this.output,
-                parsed
-            );
-        }
-    }
-
-    safeRenderSuccess(result) {
-
-        if (
-            this.renderer &&
-            typeof
-            this.renderer
-            .renderApplySuccess ===
-            'function'
-        ) {
-
-            this.renderer.renderApplySuccess(
-                this.output,
-                result
-            );
-        }
-    }
-
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // UI
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
     bindUI() {
 
-        // ---------------------------------------------------------------------
-        // SCAN
-        // ---------------------------------------------------------------------
-
-        if (this.scanBtn) {
-
-            this.scanBtn.addEventListener(
-                'click',
-                async () => {
-
-                    await this.handleScan();
-                }
-            );
-        }
-
-        // ---------------------------------------------------------------------
         // GENERATE
-        // ---------------------------------------------------------------------
 
         if (this.generateBtn) {
 
@@ -259,9 +132,7 @@ export default class ArchitectRuntime {
             );
         }
 
-        // ---------------------------------------------------------------------
         // APPLY
-        // ---------------------------------------------------------------------
 
         if (this.applyBtn) {
 
@@ -275,209 +146,32 @@ export default class ArchitectRuntime {
         }
     }
 
-    // =========================================================================
-    // SCANNER
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // ASK ARCHITECT
+    // -------------------------------------------------------------------------
 
-    async scanProject(options = {}) {
+    async askArchitect(
+        prompt,
+        scanData = {}
+    ) {
 
-        try {
-
-            // DEFAULT EXPORT
-            if (
-                typeof
-                ScannerModule.default ===
-                'function'
-            ) {
-
-                return await
-                    ScannerModule.default(
-                        options
-                    );
-            }
-
-            // scanProject()
-            if (
-                typeof
-                ScannerModule.scanProject ===
-                'function'
-            ) {
-
-                return await
-                    ScannerModule.scanProject(
-                        options
-                    );
-            }
-
-            // createArchitectScanner()
-            if (
-                typeof
-                ScannerModule
-                .createArchitectScanner ===
-                'function'
-            ) {
-
-                const scanner =
-                    ScannerModule
-                    .createArchitectScanner();
-
-                if (
-                    scanner &&
-                    typeof scanner.scan ===
-                    'function'
-                ) {
-
-                    return await
-                        scanner.scan(
-                            options
-                        );
-                }
-            }
+        if (!prompt) {
 
             throw new Error(
-                'No valid scanner export found.'
+                'Architect prompt is empty.'
             );
-
-        } catch (err) {
-
-            console.error(
-                '[ArchitectRuntime] Scanner failed:',
-                err
-            );
-
-            return {
-
-                success: false,
-
-                error:
-                    err.message,
-
-                files: [],
-
-                console: [],
-
-                dom: {}
-            };
         }
-    }
 
-    // =========================================================================
-    // SCAN
-    // =========================================================================
+        this.lastPrompt =
+            prompt;
 
-    async handleScan() {
+        this.lastScan =
+            scanData;
 
         try {
 
-            this.safeRenderLoading(
-                'Scanning runtime...'
-            );
-
-            const scan =
-                await this.scanProject();
-
-            this.lastScan =
-                scan;
-
-            console.log(
-                '📡 Scan complete:',
-                scan
-            );
-
-            this.safeRenderEmpty();
-
-        } catch (err) {
-
-            console.error(
-                '[ArchitectRuntime] Scan failed:',
-                err
-            );
-
-            this.safeRenderError(
-                err.message ||
-                'Project scan failed.'
-            );
-        }
-    }
-
-    // =========================================================================
-    // GENERATE
-    // =========================================================================
-
-    async handleGenerate() {
-
-        if (this.isGenerating) {
-            return;
-        }
-
-        try {
-
-            this.isGenerating = true;
-
-            // -----------------------------------------------------------------
-            // INPUT
-            // -----------------------------------------------------------------
-
-            const issue =
-                this.textarea?.value?.trim();
-
-            if (!issue) {
-
-                this.safeRenderError(
-                    'Describe a project issue first.'
-                );
-
-                return;
-            }
-
-            // -----------------------------------------------------------------
-            // SCAN
-            // -----------------------------------------------------------------
-
-            this.safeRenderLoading(
-                'Scanning project...'
-            );
-
-            const scan =
-                this.lastScan ||
-                await this.scanProject();
-
-            this.lastScan =
-                scan;
-
-            // -----------------------------------------------------------------
-            // BUILD PROMPT
-            // -----------------------------------------------------------------
-
-            let payload = {
-
-                issue,
-                scan
-            };
-
-            if (
-                PromptBuilder &&
-                typeof
-                PromptBuilder
-                .buildArchitectPrompt ===
-                'function'
-            ) {
-
-                payload =
-                    PromptBuilder
-                    .buildArchitectPrompt({
-
-                        issue,
-                        scan
-                    });
-            }
-
-            // -----------------------------------------------------------------
-            // API
-            // -----------------------------------------------------------------
-
-            this.safeRenderLoading(
-                'Generating AI repair patch...'
+            this.renderer.renderLoading(
+                'Connecting to Architect AI runtime...'
             );
 
             const response =
@@ -492,71 +186,130 @@ export default class ArchitectRuntime {
                         },
 
                         body:
-                            JSON.stringify(
-                                payload
-                            )
+                            JSON.stringify({
+
+                                prompt,
+
+                                scan:
+                                    scanData
+                            })
                     }
                 );
 
+            // -------------------------------------------------------------
+            // NETWORK FAILURE
+            // -------------------------------------------------------------
+
             if (!response.ok) {
 
-                const errText =
+                const text =
                     await response.text();
 
                 throw new Error(
-                    errText ||
-                    'Architect API failed.'
+
+                    text ||
+
+                    `Architect API failed (${response.status}).`
                 );
             }
+
+            // -------------------------------------------------------------
+            // JSON
+            // -------------------------------------------------------------
 
             const data =
                 await response.json();
 
+            // -------------------------------------------------------------
+            // API FAILURE
+            // -------------------------------------------------------------
+
             if (!data.ok) {
 
                 throw new Error(
+
                     data.error ||
-                    'Patch generation failed.'
+
+                    'Architect API returned failure.'
                 );
             }
 
-            // -----------------------------------------------------------------
-            // PARSE PATCH
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
+            // NORMALIZE
+            // -------------------------------------------------------------
 
-            const parsed =
-                this.patchEngine.parse(
-                    data.raw
+            const normalized =
+                this.normalizeResponse(
+                    data
                 );
 
-            if (!parsed.ok) {
+            // -------------------------------------------------------------
+            // SAVE
+            // -------------------------------------------------------------
 
-                this.safeRenderError(
-                    parsed.error ||
-                    'Patch parse failed.'
+            this.lastResponse =
+                normalized;
+
+            this.lastPatch =
+                normalized.patch || '';
+
+            // -------------------------------------------------------------
+            // RETURN
+            // -------------------------------------------------------------
+
+            return normalized;
+
+        } catch (err) {
+
+            console.error(
+                '[ArchitectRuntime] askArchitect failed:',
+                err
+            );
+
+            throw err;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GENERATE
+    // -------------------------------------------------------------------------
+
+    async handleGenerate() {
+
+        if (this.isGenerating) {
+
+            return;
+        }
+
+        try {
+
+            this.isGenerating =
+                true;
+
+            const issue =
+                this.textarea?.value?.trim();
+
+            if (!issue) {
+
+                this.renderer.renderError(
+                    'Describe the issue first.'
                 );
 
                 return;
             }
 
-            // -----------------------------------------------------------------
-            // SAVE
-            // -----------------------------------------------------------------
-
-            this.lastPatch =
-                parsed.patch;
-
-            // -----------------------------------------------------------------
-            // RENDER
-            // -----------------------------------------------------------------
-
-            this.safeRenderPatch(
-                parsed
+            this.renderer.renderLoading(
+                'Generating AI repair patch...'
             );
 
-            console.log(
-                '🛠️ Patch generated:',
-                parsed.patch
+            const result =
+                await this.askArchitect(
+                    issue,
+                    this.lastScan || {}
+                );
+
+            this.renderer.renderResponse(
+                result
             );
 
         } catch (err) {
@@ -566,47 +319,51 @@ export default class ArchitectRuntime {
                 err
             );
 
-            this.safeRenderError(
+            this.renderer.renderError(
                 err.message ||
-                'Patch generation failed.'
+
+                'AI patch generation failed.'
             );
 
         } finally {
 
-            this.isGenerating = false;
+            this.isGenerating =
+                false;
         }
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // APPLY PATCH
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
     async handleApplyPatch() {
 
         if (this.isApplying) {
+
             return;
         }
 
         try {
 
-            this.isApplying = true;
+            this.isApplying =
+                true;
 
-            // -----------------------------------------------------------------
-            // PATCH CHECK
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
+            // CHECK
+            // -------------------------------------------------------------
 
             if (!this.lastPatch) {
 
-                this.safeRenderError(
-                    'No patch available.'
+                this.renderer.renderError(
+                    'No patch available to apply.'
                 );
 
                 return;
             }
 
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
             // CONFIRM
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
 
             const confirmed =
                 window.confirm(
@@ -614,20 +371,21 @@ export default class ArchitectRuntime {
                 );
 
             if (!confirmed) {
+
                 return;
             }
 
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
             // LOADING
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
 
-            this.safeRenderLoading(
-                'Applying patch safely...'
+            this.renderer.renderLoading(
+                'Applying repair patch safely...'
             );
 
-            // -----------------------------------------------------------------
-            // API
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
+            // REQUEST
+            // -------------------------------------------------------------
 
             const response =
                 await fetch(
@@ -649,33 +407,49 @@ export default class ArchitectRuntime {
                     }
                 );
 
+            // -------------------------------------------------------------
+            // NETWORK FAILURE
+            // -------------------------------------------------------------
+
             if (!response.ok) {
 
-                const errText =
+                const text =
                     await response.text();
 
                 throw new Error(
-                    errText ||
-                    'Patch apply failed.'
+
+                    text ||
+
+                    `Patch apply failed (${response.status}).`
                 );
             }
+
+            // -------------------------------------------------------------
+            // JSON
+            // -------------------------------------------------------------
 
             const result =
                 await response.json();
 
+            // -------------------------------------------------------------
+            // FAILURE
+            // -------------------------------------------------------------
+
             if (!result.ok) {
 
                 throw new Error(
+
                     result.error ||
+
                     'Patch apply failed.'
                 );
             }
 
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
             // SUCCESS
-            // -----------------------------------------------------------------
+            // -------------------------------------------------------------
 
-            this.safeRenderSuccess(
+            this.renderer.renderApplySuccess(
                 result
             );
 
@@ -691,67 +465,158 @@ export default class ArchitectRuntime {
                 err
             );
 
-            this.safeRenderError(
+            this.renderer.renderError(
                 err.message ||
+
                 'Patch apply failed.'
             );
 
         } finally {
 
-            this.isApplying = false;
+            this.isApplying =
+                false;
         }
     }
 
-    // =========================================================================
-    // ASK ARCHITECT
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // NORMALIZER
+    // -------------------------------------------------------------------------
 
-    async askArchitect(
-        prompt,
-        scan = {}
-    ) {
+    normalizeResponse(data = {}) {
 
-        const response =
-            await fetch(
-                this.apiEndpoint,
-                {
-                    method: 'POST',
+        // -------------------------------------------------------------
+        // RAW STRING
+        // -------------------------------------------------------------
 
-                    headers: {
-                        'Content-Type':
-                            'application/json'
-                    },
+        if (
+            typeof data ===
+            'string'
+        ) {
 
-                    body:
-                        JSON.stringify({
+            return {
 
-                            prompt,
-                            scan
-                        })
-                }
-            );
+                ok: true,
 
-        if (!response.ok) {
+                summary:
+                    'AI response generated.',
 
-            const errText =
-                await response.text();
+                analysis:
+                    data,
 
-            throw new Error(
-                errText ||
-                'Architect API request failed.'
-            );
+                patch:
+                    ''
+            };
         }
 
-        return await response.json();
+        // -------------------------------------------------------------
+        // RAW FIELD
+        // -------------------------------------------------------------
+
+        if (data.raw) {
+
+            return {
+
+                ok: true,
+
+                summary:
+                    data.summary ||
+
+                    'Architect analysis complete.',
+
+                analysis:
+                    data.analysis ||
+
+                    data.raw,
+
+                patch:
+                    data.patch ||
+
+                    '',
+
+                notes:
+                    data.notes ||
+
+                    ''
+            };
+        }
+
+        // -------------------------------------------------------------
+        // OPENAI FORMAT
+        // -------------------------------------------------------------
+
+        if (
+            data.choices &&
+            Array.isArray(
+                data.choices
+            )
+        ) {
+
+            const content =
+                data.choices?.[0]
+                    ?.message
+                    ?.content || '';
+
+            return {
+
+                ok: true,
+
+                summary:
+                    'AI response generated.',
+
+                analysis:
+                    content,
+
+                patch:
+                    ''
+            };
+        }
+
+        // -------------------------------------------------------------
+        // GENERIC
+        // -------------------------------------------------------------
+
+        return {
+
+            ok: true,
+
+            summary:
+                data.summary ||
+
+                'Architect runtime completed.',
+
+            analysis:
+                data.analysis ||
+
+                JSON.stringify(
+                    data,
+                    null,
+                    2
+                ),
+
+            patch:
+                data.patch ||
+
+                '',
+
+            notes:
+                data.notes ||
+
+                ''
+        };
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // PUBLIC
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
     getLastPatch() {
 
         return this.lastPatch;
+    }
+
+    getLastResponse() {
+
+        return this.lastResponse;
     }
 
     getLastScan() {
@@ -759,20 +624,14 @@ export default class ArchitectRuntime {
         return this.lastScan;
     }
 
-    clearPatch() {
+    clear() {
 
         this.lastPatch =
             null;
 
-        if (
-            this.patchEngine &&
-            typeof this.patchEngine.clear ===
-            'function'
-        ) {
+        this.lastResponse =
+            null;
 
-            this.patchEngine.clear();
-        }
-
-        this.safeRenderEmpty();
+        this.renderer.renderEmpty();
     }
 }
