@@ -1,7 +1,70 @@
 // /devtools/architect/architect_renderer.js
 // -----------------------------------------------------------------------------
 // Symbiote Studio — Architect Renderer
-// Premium Runtime Workspace Renderer
+// Premium AI Workspace Renderer
+// -----------------------------------------------------------------------------
+
+import architectState
+from './architect_state.js';
+
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
+
+function escapeHtml(value = '') {
+
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function nl2br(value = '') {
+
+    return escapeHtml(value)
+        .replace(/\n/g, '<br>');
+}
+
+function createCodeBlock(
+    title,
+    content
+) {
+
+    return `
+        <div class="architect-code-wrap">
+
+            <div class="architect-code-header">
+                ${escapeHtml(title)}
+            </div>
+
+            <pre class="architect-code-block">${escapeHtml(content)}</pre>
+
+        </div>
+    `;
+}
+
+function createSection(
+    title,
+    body
+) {
+
+    return `
+        <section class="architect-section">
+
+            <div class="architect-section-title">
+                ${escapeHtml(title)}
+            </div>
+
+            <div class="architect-section-body">
+                ${body}
+            </div>
+
+        </section>
+    `;
+}
+
+// -----------------------------------------------------------------------------
+// MAIN
 // -----------------------------------------------------------------------------
 
 export default class ArchitectRenderer {
@@ -10,80 +73,63 @@ export default class ArchitectRenderer {
     // CONSTRUCTOR
     // -------------------------------------------------------------------------
 
-    constructor(rootElement) {
+    constructor(root) {
 
-        if (!rootElement) {
+        if (!root) {
 
             throw new Error(
-                '[ArchitectRenderer] Missing root element.'
+                '[ArchitectRenderer] Missing root.'
             );
         }
 
         this.root =
-            rootElement;
+            root;
+
+        this.unsubscribe =
+            null;
+
+        this.bindState();
 
         console.log(
-            '🧠 ArchitectRenderer ready.'
+            '🎨 ArchitectRenderer ready.'
         );
     }
 
     // -------------------------------------------------------------------------
-    // INTERNAL
+    // STATE
     // -------------------------------------------------------------------------
 
-    clear() {
+    bindState() {
 
-        this.root.innerHTML =
-            '';
-    }
+        this.unsubscribe =
+            architectState.subscribe(
+                (state) => {
 
-    sanitize(value) {
-
-        return String(
-            value ?? ''
-        )
-            .replaceAll(
-                '&',
-                '&amp;'
-            )
-            .replaceAll(
-                '<',
-                '&lt;'
-            )
-            .replaceAll(
-                '>',
-                '&gt;'
+                    this.handleStateUpdate(
+                        state
+                    );
+                }
             );
     }
 
-    section(title, body) {
+    handleStateUpdate(state) {
 
-        return `
-            <section class="architect-section">
+        // ---------------------------------------------------------------------
+        // MINIMIZED
+        // ---------------------------------------------------------------------
 
-                <div class="architect-section-title">
-                    ${this.sanitize(title)}
-                </div>
+        if (state.minimized) {
 
-                <pre class="architect-pre">${body}</pre>
+            this.root.classList.add(
+                'architect-minimized'
+            );
 
-            </section>
-        `;
-    }
+        } else {
 
-    codeBlock(title, code) {
-
-        return `
-            <div class="architect-code-wrap">
-
-                <div class="architect-code-header">
-                    ${this.sanitize(title)}
-                </div>
-
-                <pre class="architect-code-block">${this.sanitize(code)}</pre>
-
-            </div>
-        `;
+            this.root.classList.remove(
+                'architect-minimized'
+            );
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -93,18 +139,18 @@ export default class ArchitectRenderer {
     renderEmpty() {
 
         this.root.innerHTML = `
-            <div class="architect-placeholder">
+            <div class="architect-empty">
 
-                <div class="architect-placeholder-icon">
-                    ✦
+                <div class="architect-empty-icon">
+                    🧠
                 </div>
 
-                <div class="architect-placeholder-title">
+                <div class="architect-empty-title">
                     Architect Runtime Ready
                 </div>
 
-                <div class="architect-placeholder-text">
-                    Describe a runtime issue to generate
+                <div class="architect-empty-text">
+                    Describe a project issue to generate
                     structured AI repair patches.
                 </div>
 
@@ -116,7 +162,14 @@ export default class ArchitectRenderer {
     // LOADING
     // -------------------------------------------------------------------------
 
-    renderLoading(message = 'Loading...') {
+    renderLoading(
+        message =
+            'Loading...'
+    ) {
+
+        architectState.setLoading(
+            true
+        );
 
         this.root.innerHTML = `
             <div class="architect-loading">
@@ -124,7 +177,7 @@ export default class ArchitectRenderer {
                 <div class="architect-spinner"></div>
 
                 <div class="architect-loading-text">
-                    ${this.sanitize(message)}
+                    ${escapeHtml(message)}
                 </div>
 
             </div>
@@ -135,21 +188,23 @@ export default class ArchitectRenderer {
     // ERROR
     // -------------------------------------------------------------------------
 
-    renderError(error) {
+    renderError(
+        message =
+            'Unknown error.'
+    ) {
 
-        const message =
-            error?.message ||
-            String(error) ||
-            'Unknown renderer error.';
+        architectState.setError(
+            message
+        );
 
         this.root.innerHTML = `
             <div class="architect-error">
 
                 <div class="architect-error-title">
-                    Architect Runtime Error
+                    Runtime Failure
                 </div>
 
-                <pre class="architect-error-body">${this.sanitize(message)}</pre>
+                <pre class="architect-error-body">${escapeHtml(message)}</pre>
 
             </div>
         `;
@@ -159,419 +214,391 @@ export default class ArchitectRenderer {
     // RESPONSE
     // -------------------------------------------------------------------------
 
-    renderResponse(response) {
+    renderResponse(
+        response = {}
+    ) {
 
-        try {
+        architectState.setResponse(
+            response
+        );
 
-            const normalized =
-                this.normalizeAIResponse(
-                    response
-                );
+        const summary =
+            response.summary || '';
 
-            const summary =
-                normalized.summary ||
-                'AI repair response generated successfully.';
+        const analysis =
+            response.analysis || '';
 
-            const analysis =
-                normalized.analysis ||
-                'No analysis provided.';
+        const patch =
+            response.patch || '';
 
-            const patch =
-                normalized.patch ||
-                '';
+        const notes =
+            response.notes || '';
 
-            const notes =
-                normalized.notes ||
-                '';
+        let html =
+            `
+            <div class="architect-report">
+        `;
 
-            this.root.innerHTML = `
-                <div class="architect-report">
+        // ---------------------------------------------------------------------
+        // HEADER
+        // ---------------------------------------------------------------------
 
-                    <!-- HEADER -->
+        html += `
+            <div class="architect-report-header">
 
-                    <section class="architect-section">
+                <div>
 
-                        <div class="architect-section-title">
-                            AI Runtime Analysis
-                        </div>
+                    <div class="architect-report-title">
+                        Architect Analysis
+                    </div>
 
-                        <div class="architect-response-text">
+                    <div class="architect-report-subtitle">
+                        AI Runtime Diagnostics
+                    </div>
 
-                            ${this.sanitize(summary)}
+                </div>
 
-                        </div>
+            </div>
+        `;
 
-                    </section>
+        // ---------------------------------------------------------------------
+        // SUMMARY
+        // ---------------------------------------------------------------------
 
-                    <!-- ANALYSIS -->
+        if (summary) {
 
-                    ${this.section(
-                        'Analysis',
-                        this.sanitize(
-                            analysis
-                        )
-                    )}
+            html += createSection(
+                'Summary',
+                `
+                <div class="architect-response-text">
+                    ${nl2br(summary)}
+                </div>
+                `
+            );
+        }
 
-                    <!-- PATCH -->
+        // ---------------------------------------------------------------------
+        // ANALYSIS
+        // ---------------------------------------------------------------------
 
-                    ${
-                        patch
-                            ? this.codeBlock(
-                                'Generated Patch',
-                                patch
-                            )
-                            : ''
-                    }
+        if (analysis) {
 
-                    <!-- NOTES -->
+            html += createSection(
+                'Root Cause Analysis',
+                `
+                <div class="architect-response-text">
+                    ${nl2br(analysis)}
+                </div>
+                `
+            );
+        }
 
-                    ${
-                        notes
-                            ? this.section(
-                                'Additional Notes',
-                                this.sanitize(
-                                    notes
-                                )
-                            )
-                            : ''
-                    }
+        // ---------------------------------------------------------------------
+        // PATCH
+        // ---------------------------------------------------------------------
+
+        if (patch) {
+
+            html += createSection(
+                'Generated Repair Patch',
+
+                createCodeBlock(
+                    'AI PATCH',
+                    patch
+                )
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // NOTES
+        // ---------------------------------------------------------------------
+
+        if (notes) {
+
+            html += createSection(
+                'Implementation Notes',
+                `
+                <div class="architect-response-text">
+                    ${nl2br(notes)}
+                </div>
+                `
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // ACTIONS
+        // ---------------------------------------------------------------------
+
+        if (patch) {
+
+            html += `
+                <div class="architect-runtime-actions">
+
+                    <button
+                        class="architect-apply-btn"
+                        id="architectApplyPatchBtn"
+                    >
+                        Apply Patch
+                    </button>
+
+                    <button
+                        class="architect-copy-btn"
+                        id="architectCopyPatchBtn"
+                    >
+                        Copy Patch
+                    </button>
 
                 </div>
             `;
-
-        } catch (err) {
-
-            console.error(
-                '[ArchitectRenderer] renderResponse failed:',
-                err
-            );
-
-            this.renderError(
-                err
-            );
         }
+
+        // ---------------------------------------------------------------------
+        // END
+        // ---------------------------------------------------------------------
+
+        html += `
+            </div>
+        `;
+
+        this.root.innerHTML =
+            html;
+
+        // ---------------------------------------------------------------------
+        // EVENTS
+        // ---------------------------------------------------------------------
+
+        this.bindResponseEvents(
+            patch
+        );
     }
 
     // -------------------------------------------------------------------------
     // SCAN RESULT
     // -------------------------------------------------------------------------
 
-    renderScanResult(scanResult = {}) {
+    renderScanResult(
+        scan = {}
+    ) {
 
-        try {
+        architectState.setScan(
+            scan
+        );
 
-            const runtimeErrors =
-                Array.isArray(
-                    scanResult.errors
-                )
-                    ? scanResult.errors
-                    : [];
+        const html = `
+            <div class="architect-report">
 
-            const consoleLogs =
-                Array.isArray(
-                    scanResult.console
-                )
-                    ? scanResult.console
-                    : [];
+                <div class="architect-report-header">
 
-            const files =
-                Array.isArray(
-                    scanResult.files
-                )
-                    ? scanResult.files
-                    : [];
+                    <div>
 
-            const dom =
-                scanResult.dom ||
-                {};
-
-            this.root.innerHTML = `
-                <div class="architect-report">
-
-                    <!-- HEADER -->
-
-                    <section class="architect-section">
-
-                        <div class="architect-section-title">
+                        <div class="architect-report-title">
                             Runtime Scan Complete
                         </div>
 
-                        <div class="architect-response-text">
-
-                            Runtime inspection completed successfully.
-
+                        <div class="architect-report-subtitle">
+                            Environment Diagnostics
                         </div>
 
-                    </section>
+                    </div>
 
-                    <!-- ERRORS -->
+                </div>
 
-                    ${this.section(
-                        'Runtime Errors',
-                        runtimeErrors.length
-                            ? runtimeErrors
-                                .map((item) =>
-                                    typeof item ===
-                                    'string'
-                                        ? item
-                                        : JSON.stringify(
-                                            item,
-                                            null,
-                                            2
-                                        )
-                                )
-                                .join('\n\n')
-                            : 'No runtime errors detected.'
-                    )}
-
-                    <!-- FILES -->
-
-                    ${this.section(
-                        'Scanned Files',
-                        files.length
-                            ? files.join('\n')
-                            : 'No file metadata available.'
-                    )}
-
-                    <!-- CONSOLE -->
-
-                    ${this.section(
-                        'Console Output',
-                        consoleLogs.length
-                            ? consoleLogs
-                                .map((item) =>
-                                    typeof item ===
-                                    'string'
-                                        ? item
-                                        : JSON.stringify(
-                                            item,
-                                            null,
-                                            2
-                                        )
-                                )
-                                .join('\n\n')
-                            : 'No console logs captured.'
-                    )}
-
-                    <!-- DOM -->
-
-                    ${this.section(
-                        'DOM Snapshot',
+                ${createSection(
+                    'Runtime',
+                    `
+                    <pre class="architect-pre">${escapeHtml(
                         JSON.stringify(
-                            dom,
+                            scan.runtime || {},
                             null,
                             2
                         )
-                    )}
+                    )}</pre>
+                    `
+                )}
 
-                </div>
-            `;
+                ${createSection(
+                    'Performance',
+                    `
+                    <pre class="architect-pre">${escapeHtml(
+                        JSON.stringify(
+                            scan.performance || {},
+                            null,
+                            2
+                        )
+                    )}</pre>
+                    `
+                )}
 
-        } catch (err) {
+                ${createSection(
+                    'Runtime Errors',
+                    `
+                    <pre class="architect-pre">${escapeHtml(
+                        JSON.stringify(
+                            scan.errors || [],
+                            null,
+                            2
+                        )
+                    )}</pre>
+                    `
+                )}
 
-            console.error(
-                '[ArchitectRenderer] renderScanResult failed:',
-                err
-            );
+            </div>
+        `;
 
-            this.renderError(
-                err
-            );
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // PATCH RESULT
-    // -------------------------------------------------------------------------
-
-    renderPatchResult(result = {}) {
-
-        try {
-
-            const patch =
-                result.patch ||
-                result.raw ||
-                '';
-
-            const summary =
-                result.summary ||
-                'AI patch generated successfully.';
-
-            this.root.innerHTML = `
-                <div class="architect-report">
-
-                    <section class="architect-section">
-
-                        <div class="architect-section-title">
-                            Patch Generation Complete
-                        </div>
-
-                        <div class="architect-response-text">
-
-                            ${this.sanitize(summary)}
-
-                        </div>
-
-                    </section>
-
-                    ${this.codeBlock(
-                        'Patch Output',
-                        patch
-                    )}
-
-                </div>
-            `;
-
-        } catch (err) {
-
-            console.error(
-                '[ArchitectRenderer] renderPatchResult failed:',
-                err
-            );
-
-            this.renderError(
-                err
-            );
-        }
+        this.root.innerHTML =
+            html;
     }
 
     // -------------------------------------------------------------------------
     // APPLY SUCCESS
     // -------------------------------------------------------------------------
 
-    renderApplySuccess(result = {}) {
-
-        const message =
-            result.message ||
-            'Patch applied successfully.';
+    renderApplySuccess(
+        result = {}
+    ) {
 
         const files =
             Array.isArray(
                 result.files
             )
-                ? result.files.join(
-                    '\n'
-                )
-                : 'No modified file list available.';
+                ? result.files
+                : [];
 
         this.root.innerHTML = `
-            <div class="architect-report">
+            <div class="architect-success">
 
-                <section class="architect-section">
+                <div class="architect-success-icon">
+                    ✅
+                </div>
 
-                    <div class="architect-section-title">
-                        Patch Applied
-                    </div>
+                <div class="architect-success-title">
+                    Patch Applied Successfully
+                </div>
 
-                    <div class="architect-response-text">
+                <div class="architect-success-text">
+                    ${escapeHtml(
+                        result.message ||
 
-                        ${this.sanitize(message)}
+                        'Files updated successfully.'
+                    )}
+                </div>
 
-                    </div>
-
-                </section>
-
-                ${this.section(
-                    'Modified Files',
-                    this.sanitize(
-                        files
-                    )
-                )}
+                ${
+                    files.length
+                        ? createSection(
+                            'Modified Files',
+                            `
+                            <pre class="architect-pre">${escapeHtml(
+                                files.join('\n')
+                            )}</pre>
+                            `
+                        )
+                        : ''
+                }
 
             </div>
         `;
     }
 
     // -------------------------------------------------------------------------
-    // NORMALIZER
+    // EVENTS
     // -------------------------------------------------------------------------
 
-    normalizeAIResponse(response) {
+    bindResponseEvents(
+        patch = ''
+    ) {
 
-        // STRING RESPONSE
+        // ---------------------------------------------------------------------
+        // COPY
+        // ---------------------------------------------------------------------
+
+        const copyBtn =
+            this.root.querySelector(
+                '#architectCopyPatchBtn'
+            );
+
+        if (copyBtn) {
+
+            copyBtn.addEventListener(
+                'click',
+                async () => {
+
+                    try {
+
+                        await navigator
+                            .clipboard
+                            .writeText(
+                                patch
+                            );
+
+                        copyBtn.textContent =
+                            'Copied';
+
+                        setTimeout(
+                            () => {
+
+                                copyBtn.textContent =
+                                    'Copy Patch';
+
+                            },
+                            1500
+                        );
+
+                    } catch (err) {
+
+                        console.error(err);
+                    }
+                }
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // APPLY
+        // ---------------------------------------------------------------------
+
+        const applyBtn =
+            this.root.querySelector(
+                '#architectApplyPatchBtn'
+            );
+
+        if (applyBtn) {
+
+            applyBtn.addEventListener(
+                'click',
+                () => {
+
+                    window.dispatchEvent(
+
+                        new CustomEvent(
+
+                            'architect:apply-patch',
+
+                            {
+                                detail: {
+                                    patch
+                                }
+                            }
+                        )
+                    );
+                }
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // DESTROY
+    // -------------------------------------------------------------------------
+
+    destroy() {
 
         if (
-            typeof response ===
-            'string'
+            this.unsubscribe
         ) {
 
-            return {
+            this.unsubscribe();
 
-                summary:
-                    'AI response received.',
-
-                analysis:
-                    response,
-
-                patch:
-                    ''
-            };
+            this.unsubscribe =
+                null;
         }
-
-        // NULL SAFETY
-
-        if (!response) {
-
-            return {
-
-                summary:
-                    'Empty AI response.',
-
-                analysis:
-                    '',
-
-                patch:
-                    ''
-            };
-        }
-
-        // RAW FORMAT
-
-        if (response.raw) {
-
-            return {
-
-                summary:
-                    response.summary ||
-                    'AI response generated.',
-
-                analysis:
-                    response.analysis ||
-                    response.raw,
-
-                patch:
-                    response.patch ||
-                    '',
-
-                notes:
-                    response.notes ||
-                    ''
-            };
-        }
-
-        // GENERIC OBJECT
-
-        return {
-
-            summary:
-                response.summary ||
-                'AI runtime response generated.',
-
-            analysis:
-                response.analysis ||
-                JSON.stringify(
-                    response,
-                    null,
-                    2
-                ),
-
-            patch:
-                response.patch ||
-                '',
-
-            notes:
-                response.notes ||
-                ''
-        };
     }
 }
