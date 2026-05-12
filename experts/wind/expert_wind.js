@@ -69,8 +69,10 @@ export default class WindExpert {
     this.stereo =
       ctx.createStereoPanner();
 
-    // routing
+    // routing (stems + bloom + hiss filter)
     this.output.connect(this.masterTone);
+    this.bloomPeakVH.connect(this.masterTone);
+    this.hissReductionFilter.connect(this.masterTone);
     this.masterTone.connect(this.masterCompressor);
     this.masterCompressor.connect(this.stereo);
     this.stereo.connect(destination);
@@ -84,6 +86,7 @@ export default class WindExpert {
     this.resonance = 0.36;
     this.movement = 0.52;
     this.stereoWidth = 0.70;
+    this.bloom = 0.35;
 
     // -----------------------------------------------------
     // STEMS
@@ -113,6 +116,67 @@ export default class WindExpert {
     this.resonanceStem.connect(this.output);
     this.textureStem.connect(this.output);
     this.environment.connect(this.output);
+
+    // -----------------------------------------------------
+    // BLOOM DSP (CINEMATIC RESONANCE) - POST-PROCESSOR
+    // -----------------------------------------------------
+
+    // Dynamic lowpass (hiss reduction at low intensity)
+    this.dynamicLowpass = ctx.createBiquadFilter();
+    this.dynamicLowpass.type = 'lowpass';
+    this.dynamicLowpass.frequency.value = 8000;
+    this.dynamicLowpass.Q.value = 0.7;
+
+    // Bloom resonance layer (subtle peaks at 320, 540, 870, 1.2khz)
+    this.bloomPeakL = ctx.createBiquadFilter();
+    this.bloomPeakL.type = 'peaking';
+    this.bloomPeakL.frequency.value = 320;
+    this.bloomPeakL.gain.value = 0;
+    this.bloomPeakL.Q.value = 15;
+
+    this.bloomPeakM = ctx.createBiquadFilter();
+    this.bloomPeakM.type = 'peaking';
+    this.bloomPeakM.frequency.value = 540;
+    this.bloomPeakM.gain.value = 0;
+    this.bloomPeakM.Q.value = 12;
+
+    this.bloomPeakH = ctx.createBiquadFilter();
+    this.bloomPeakH.type = 'peaking';
+    this.bloomPeakH.frequency.value = 870;
+    this.bloomPeakH.gain.value = 0;
+    this.bloomPeakH.Q.value = 10;
+
+    this.bloomPeakVH = ctx.createBiquadFilter();
+    this.bloomPeakVH.type = 'peaking';
+    this.bloomPeakVH.frequency.value = 1200;
+    this.bloomPeakVH.gain.value = 0;
+    this.bloomPeakVH.Q.value = 8;
+
+    // Hiss reduction filter (highpass to control low-frequency noise)
+    this.hissReductionFilter = ctx.createBiquadFilter();
+    this.hissReductionFilter.type = 'highpass';
+    this.hissReductionFilter.frequency.value = 80;
+    this.hissReductionFilter.Q.value = 0.5;
+
+    // Bloom modulation state
+    this.bloomPhase = Math.random() * Math.PI * 2;
+    this.bloomSweepPhase = Math.random() * Math.PI * 2;
+
+    // Connect bloom chain: output → filters → master tone
+    this.output.connect(this.dynamicLowpass);
+    this.output.connect(this.hissReductionFilter);
+
+    this.dynamicLowpass.connect(this.bloomPeakL);
+    this.bloomPeakL.connect(this.bloomPeakM);
+    this.bloomPeakM.connect(this.bloomPeakH);
+    this.bloomPeakH.connect(this.bloomPeakVH);
+
+    // Bloom peaks merge back to master tone
+    this.bloomPeakVH.connect(this.masterTone);
+    this.hissReductionFilter.connect(this.masterTone);
+
+    // Main stem output also goes to master tone
+    this.output.connect(this.masterTone);
 
     // -----------------------------------------------------
     // MODULATION ENGINE
@@ -203,6 +267,14 @@ export default class WindExpert {
   setStereoWidth(v) {
 
     this.stereoWidth =
+      this._clamp(v);
+
+    this.updateAll();
+  }
+
+  setBloom(v) {
+
+    this.bloom =
       this._clamp(v);
 
     this.updateAll();
@@ -311,6 +383,112 @@ export default class WindExpert {
         pan,
         this.ctx.currentTime,
         1.5
+      );
+
+    // ---------------------------------------------------
+    // BLOOM RESONANCE DSP
+    // ---------------------------------------------------
+
+    // Bloom intensity scaled by bloom param and energy
+    const bloomIntensity =
+      this.bloom * energy * 0.6;
+
+    // Dynamic lowpass: darker at low intensity
+    const lowpassFreq =
+      6000 +
+      this.intensity * 6000;
+
+    this.dynamicLowpass.frequency
+      .setTargetAtTime(
+        lowpassFreq,
+        this.ctx.currentTime,
+        0.15
+      );
+
+    // Slow resonance peak drift (10-40s evolution)
+    this.bloomPhase +=
+      0.0001 +
+      this.intensity * 0.00005;
+
+    const peakDrift =
+      Math.sin(this.bloomPhase * 0.3) * 20;
+
+    this.bloomPeakL.frequency
+      .setTargetAtTime(
+        320 + peakDrift,
+        this.ctx.currentTime,
+        0.5
+      );
+
+    this.bloomPeakM.frequency
+      .setTargetAtTime(
+        540 + peakDrift * 0.8,
+        this.ctx.currentTime,
+        0.5
+      );
+
+    this.bloomPeakH.frequency
+      .setTargetAtTime(
+        870 + peakDrift * 0.6,
+        this.ctx.currentTime,
+        0.5
+      );
+
+    this.bloomPeakVH.frequency
+      .setTargetAtTime(
+        1200 + peakDrift * 0.4,
+        this.ctx.currentTime,
+        0.5
+      );
+
+    // Slow gain swelling (atmospheric breathing)
+    this.bloomSweepPhase += 0.00001;
+    const gainSwell =
+      0.6 +
+      Math.sin(this.bloomSweepPhase) * 0.4;
+
+    // Peak gains modulated by bloom and swell
+    const peakGainScale =
+      bloomIntensity * gainSwell;
+
+    this.bloomPeakL.gain
+      .setTargetAtTime(
+        4 * peakGainScale,
+        this.ctx.currentTime,
+        0.8
+      );
+
+    this.bloomPeakM.gain
+      .setTargetAtTime(
+        3 * peakGainScale,
+        this.ctx.currentTime,
+        0.8
+      );
+
+    this.bloomPeakH.gain
+      .setTargetAtTime(
+        2.5 * peakGainScale,
+        this.ctx.currentTime,
+        0.8
+      );
+
+    this.bloomPeakVH.gain
+      .setTargetAtTime(
+        1.5 * peakGainScale,
+        this.ctx.currentTime,
+        0.8
+      );
+
+    // Hiss reduction: reduce high-pass at low intensity
+    const hissFreq =
+      80 +
+      this.intensity * 120;
+
+    this.hissReductionFilter.frequency
+      .setTargetAtTime(
+        hissFreq,
+        this.ctx.currentTime,
+        0.2
       );
 
     // ---------------------------------------------------

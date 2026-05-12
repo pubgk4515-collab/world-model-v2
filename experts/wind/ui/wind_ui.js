@@ -137,6 +137,23 @@ export function createWindCardHTML(id) {
           />
         </div>
 
+        <!-- BLOOM -->
+        <div class="wind-slider-row">
+          <div class="wind-slider-top">
+            <span>BLOOM</span>
+            <span class="bloom-readout">0.35</span>
+          </div>
+
+          <input
+            type="range"
+            class="wind-slider bloom-slider"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.35"
+          />
+        </div>
+
         <!-- WIDTH -->
         <div class="wind-slider-row">
           <div class="wind-slider-top">
@@ -241,6 +258,9 @@ export function bindWindUI(card, expert) {
   const resonanceSlider =
     card.querySelector('.resonance-slider');
 
+  const bloomSlider =
+    card.querySelector('.bloom-slider');
+
   const widthSlider =
     card.querySelector('.width-slider');
 
@@ -259,6 +279,7 @@ export function bindWindUI(card, expert) {
     movementSlider,
     textureSlider,
     resonanceSlider,
+    bloomSlider,
     widthSlider
   ].forEach(updateSliderVisual);
 
@@ -325,6 +346,22 @@ export function bindWindUI(card, expert) {
     updateSliderVisual(e.target);
 
     expert.setResonance(v);
+  });
+
+  // -------------------------------------------------------
+  // Bloom
+  // -------------------------------------------------------
+
+  bloomSlider.addEventListener('input', (e) => {
+
+    const v = parseFloat(e.target.value);
+
+    card.querySelector('.bloom-readout')
+      .textContent = v.toFixed(2);
+
+    updateSliderVisual(e.target);
+
+    expert.setBloom(v);
   });
 
   // -------------------------------------------------------
