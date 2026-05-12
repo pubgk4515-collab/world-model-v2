@@ -806,3 +806,12 @@ export default class ArchitectRuntime {
         this.safeRenderEmpty();
     }
 }
+
+// -----------------------------------------------------------------------------
+// FACTORY
+// -----------------------------------------------------------------------------
+
+export function createArchitectRuntime(config = {}) {
+
+    return new ArchitectRuntime(config);
+}
