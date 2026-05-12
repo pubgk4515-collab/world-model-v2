@@ -1,47 +1,15 @@
 /**
  * stems/gust_stem.js
  * =========================================================
- * Dynamic Gust Layer
+ * Cinematic Pressure Gust System
  * =========================================================
  *
- * PURPOSE:
- * --------
- * This stem creates:
- *
- *   "wind passing by you"
- *
- * instead of:
- *
- *   static boring airflow
- *
- * Real wind constantly changes pressure.
- * Tiny gusts + medium gusts + rare heavy swells
- * create realism.
- *
- * IMPORTANT:
- * ----------
- * This stem should NEVER dominate.
- *
- * If this layer is too loud:
- *   ❌ hurricane
- *   ❌ airplane engine
- *   ❌ earthquake
- *
- * This layer must feel:
- *
- *   atmospheric
- *   cinematic
- *   soft
- *   pressure-based
- *
- * CPU:
- * ----
- * Very lightweight.
- *
- * Only:
- * - one filtered pink noise stem
- * - slow gain automation
- * - slow stereo motion
+ * Philosophy:
+ * - gusts should feel like pressure movement
+ * - not noise bursts
+ * - no harsh hiss
+ * - wide slow atmospheric swells
+ * - subtle realism
  */
 
 import StemPlayer from '../engine/stem_player.js';
@@ -56,46 +24,54 @@ export default class GustStem {
 
     this.ctx = ctx;
 
-    /* =====================================================
-       OUTPUT
-    ===================================================== */
+    // =====================================================
+    // OUTPUT
+    // =====================================================
 
-    this.output = ctx.createGain();
-    this.output.gain.value = 1;
+    this.output =
+      ctx.createGain();
 
-    /* =====================================================
-       SOURCE
-    ===================================================== */
+    this.output.gain.value =
+      1;
+
+    // =====================================================
+    // SOURCE
+    // =====================================================
 
     const buffers =
       getNoiseBuffers(ctx);
 
     /**
-     * Pink noise is PERFECT for gusts.
-     *
-     * White:
-     *   harsh
-     *
-     * Brown:
-     *   too soft
-     *
-     * Pink:
-     *   natural air energy
+     * Brown works better now
+     * because airflow already
+     * handles upper texture.
      */
 
     this.player =
       new StemPlayer(
         ctx,
-        buffers.pink
+        buffers.brown
       );
 
-    /* =====================================================
-       FILTERS
-    ===================================================== */
+    // =====================================================
+    // SOURCE SMOOTHING
+    // =====================================================
 
-    /**
-     * Remove low mud
-     */
+    this.preLowpass =
+      ctx.createBiquadFilter();
+
+    this.preLowpass.type =
+      'lowpass';
+
+    this.preLowpass.frequency.value =
+      1800;
+
+    this.preLowpass.Q.value =
+      0.5;
+
+    // =====================================================
+    // LOW CLEANUP
+    // =====================================================
 
     this.highpass =
       ctx.createBiquadFilter();
@@ -104,66 +80,100 @@ export default class GustStem {
       'highpass';
 
     this.highpass.frequency.value =
-      180;
+      70;
 
-    /**
-     * Gust softness
-     */
+    this.highpass.Q.value =
+      0.5;
 
-    this.lowpass =
+    // =====================================================
+    // PRESSURE BODY
+    // =====================================================
+
+    this.bodyPeak =
       ctx.createBiquadFilter();
 
-    this.lowpass.type =
-      'lowpass';
+    this.bodyPeak.type =
+      'peaking';
 
-    this.lowpass.frequency.value =
-      2400;
+    this.bodyPeak.frequency.value =
+      420;
 
-    this.lowpass.Q.value = 0.5;
-
-    /**
-     * Moving air body
-     */
-
-    this.bandpass =
-      ctx.createBiquadFilter();
-
-    this.bandpass.type =
-      'bandpass';
-
-    this.bandpass.frequency.value =
-      700;
-
-    this.bandpass.Q.value =
+    this.bodyPeak.Q.value =
       0.8;
 
-    /**
-     * Dynamic gust gain
-     */
+    this.bodyPeak.gain.value =
+      0;
+
+    // =====================================================
+    // AIR SWELL
+    // =====================================================
+
+    this.airPeak =
+      ctx.createBiquadFilter();
+
+    this.airPeak.type =
+      'peaking';
+
+    this.airPeak.frequency.value =
+      920;
+
+    this.airPeak.Q.value =
+      0.9;
+
+    this.airPeak.gain.value =
+      0;
+
+    // =====================================================
+    // FINAL SHAPING
+    // =====================================================
+
+    this.finalLowpass =
+      ctx.createBiquadFilter();
+
+    this.finalLowpass.type =
+      'lowpass';
+
+    this.finalLowpass.frequency.value =
+      2600;
+
+    this.finalLowpass.Q.value =
+      0.5;
+
+    // =====================================================
+    // GUST GAIN
+    // =====================================================
 
     this.gustGain =
       ctx.createGain();
 
     this.gustGain.gain.value =
-      0.0;
+      0;
 
-    /* =====================================================
-       CHAIN
-    ===================================================== */
+    // =====================================================
+    // SIGNAL CHAIN
+    // =====================================================
 
     this.player.connect(
+      this.preLowpass
+    );
+
+    this.preLowpass.connect(
       this.highpass
     );
 
     this.highpass.connect(
-      this.lowpass
+      this.bodyPeak
     );
 
-    this.lowpass.connect(
-      this.bandpass
+    this.bodyPeak.connect(
+      this.airPeak
     );
 
-    this.bandpass.connect(
+    this.airPeak.connect(
+      this.finalLowpass
+    );
+
+    this.finalLowpass.connect(
       this.gustGain
     );
 
@@ -171,20 +181,23 @@ export default class GustStem {
       this.output
     );
 
-    /* =====================================================
-       STATE
-    ===================================================== */
+    // =====================================================
+    // STATE
+    // =====================================================
 
-    this.intensity = 0.3;
+    this.intensity = 0.2;
 
     this.isRunning = false;
 
     this.gustTimer = null;
+
+    this.motionPhase =
+      Math.random() * Math.PI * 2;
   }
 
-  /* =======================================================
-     START
-  ======================================================= */
+  // =======================================================
+  // START
+  // =======================================================
 
   start() {
 
@@ -193,45 +206,40 @@ export default class GustStem {
     this.player.start();
 
     /**
-     * VERY IMPORTANT:
-     *
-     * Gust layer should start SILENT.
+     * MUCH lower base gain.
      */
 
-    this.player.setGain(0.25);
-
-    /**
-     * Wide stereo drift
-     */
-
-    this.player.startStereoDrift(
-      0.22,
-      12000
+    this.player.setGain(
+      0.01
     );
 
-    /**
-     * Begin gust scheduling
-     */
+    this.player.startStereoDrift(
+      0.05
+    );
 
     this.scheduleNextGust();
 
     this.isRunning = true;
   }
 
-  /* =======================================================
-     STOP
-  ======================================================= */
+  // =======================================================
+  // STOP
+  // =======================================================
 
   stop() {
 
     this.isRunning = false;
 
     if (this.gustTimer) {
-      clearTimeout(this.gustTimer);
+
+      clearTimeout(
+        this.gustTimer
+      );
+
       this.gustTimer = null;
     }
 
-    this.player.stop(3);
+    this.player.stop(5);
 
     const now =
       this.ctx.currentTime;
@@ -240,13 +248,13 @@ export default class GustStem {
       .setTargetAtTime(
         0,
         now,
-        1.5
+        3
       );
   }
 
-  /* =======================================================
-     CONNECT
-  ======================================================= */
+  // =======================================================
+  // CONNECT
+  // =======================================================
 
   connect(destination) {
     this.output.connect(destination);
@@ -256,36 +264,25 @@ export default class GustStem {
     this.output.disconnect();
   }
 
-  /* =======================================================
-     MAIN GUST SYSTEM
-  ======================================================= */
-
-  /**
-   * This is where realism happens.
-   *
-   * Real wind:
-   * ----------
-   * - not rhythmic
-   * - not looping
-   * - not predictable
-   *
-   * So:
-   * - random timing
-   * - random duration
-   * - random strength
-   */
+  // =======================================================
+  // GUST SCHEDULER
+  // =======================================================
 
   scheduleNextGust() {
 
     if (!this.isRunning) return;
 
     /**
-     * Random timing
+     * MUCH slower pacing.
      */
 
+    const intensityFactor =
+      1 - this.intensity;
+
     const delay =
-      2000 +
-      Math.random() * 7000;
+      6000 +
+      intensityFactor * 8000 +
+      Math.random() * 12000;
 
     this.gustTimer =
       setTimeout(() => {
@@ -297,267 +294,248 @@ export default class GustStem {
       }, delay);
   }
 
-  /* =======================================================
-     GUST EVENT
-  ======================================================= */
+  // =======================================================
+  // GUST EVENT
+  // =======================================================
 
   triggerGust() {
 
     const now =
       this.ctx.currentTime;
 
-    /**
-     * Gust strength depends
-     * on intensity.
-     */
-
-    const intensity =
+    const value =
       this.intensity;
 
     /**
-     * Rare heavy gust chance
+     * Gust emergence.
+     *
+     * Calm wind should
+     * barely gust.
      */
 
-    const heavyChance =
-      Math.random();
+    const emergence =
+      Math.max(
+        0,
+        (value - 0.18) / 0.82
+      );
 
-    let targetGain;
-
-    if (
-      intensity > 0.7 &&
-      heavyChance > 0.82
-    ) {
-
-      /**
-       * Heavy atmospheric swell
-       */
-
-      targetGain =
-        0.18 +
-        Math.random() * 0.12;
-
-    } else {
-
-      /**
-       * Normal soft gust
-       */
-
-      targetGain =
-        0.03 +
-        intensity * 0.12 +
-        Math.random() * 0.05;
-    }
+    const energy =
+      Math.pow(
+        emergence,
+        1.3
+      );
 
     /**
-     * Gust duration
+     * Much softer target.
      */
 
-    const riseTime =
-      1.5 +
-      Math.random() * 2.5;
+    const targetGain =
+      0.01 +
+      energy * 0.07;
 
-    const fallTime =
-      2.5 +
+    // =====================================================
+    // LONG SWELLS
+    // =====================================================
+
+    const rise =
+      4 +
       Math.random() * 5;
 
-    /**
-     * Frequency movement
-     */
+    const fall =
+      7 +
+      Math.random() * 9;
 
-    const centerFreq =
-      500 +
-      Math.random() * 900;
+    // =====================================================
+    // ORGANIC DRIFT
+    // =====================================================
 
-    this.bandpass.frequency
+    this.motionPhase +=
+      0.12 +
+      Math.random() * 0.08;
+
+    const drift =
+      Math.sin(
+        this.motionPhase
+      ) * 60;
+
+    // =====================================================
+    // PRESSURE BODY
+    // =====================================================
+
+    this.bodyPeak.frequency
       .setTargetAtTime(
-        centerFreq,
+        420 + drift,
         now,
-        2
+        4
       );
 
-    /**
-     * Gust EQ shifts
-     */
-
-    const lpFreq =
-      1800 +
-      intensity * 2600;
-
-    this.lowpass.frequency
+    this.bodyPeak.gain
       .setTargetAtTime(
-        lpFreq,
+        energy * 5,
         now,
-        3
+        5
       );
 
-    /* =====================================================
-       GAIN ENVELOPE
-    ===================================================== */
+    // =====================================================
+    // AIR SWELL
+    // =====================================================
 
-    /**
-     * IMPORTANT:
-     * We use CURVED ramps.
-     *
-     * Linear ramps sound fake.
-     */
+    this.airPeak.frequency
+      .setTargetAtTime(
+        920 + drift * 0.5,
+        now,
+        5
+      );
 
-    const current =
-      this.gustGain.gain.value;
+    this.airPeak.gain
+      .setTargetAtTime(
+        energy * 2.5,
+        now,
+        5
+      );
 
-    this.gustGain.gain.cancelScheduledValues(now);
+    // =====================================================
+    // TONE
+    // =====================================================
+
+    const tone =
+      1600 +
+      energy * 2200;
+
+    this.finalLowpass.frequency
+      .setTargetAtTime(
+        tone,
+        now,
+        5
+      );
+
+    // =====================================================
+    // ENVELOPE
+    // =====================================================
 
     this.gustGain.gain
-      .setValueAtTime(
-        current,
-        now
-      );
-
-    /**
-     * Slow inhale
-     */
+      .cancelScheduledValues(now);
 
     this.gustGain.gain
       .setTargetAtTime(
         targetGain,
         now,
-        riseTime * 0.35
+        rise * 0.45
       );
-
-    /**
-     * Slow release
-     */
 
     this.gustGain.gain
       .setTargetAtTime(
         0,
-        now + riseTime,
-        fallTime * 0.4
+        now + rise,
+        fall * 0.55
       );
 
-    /* =====================================================
-       PLAYBACK MOTION
-    ===================================================== */
-
-    /**
-     * Tiny speed changes
-     * make gusts feel alive.
-     */
+    // =====================================================
+    // MOTION
+    // =====================================================
 
     const rate =
-      0.98 +
-      Math.random() * 0.06;
+      0.992 +
+      energy * 0.018;
 
     this.player.setPlaybackRate(
       rate,
-      4
-    );
-
-    /* =====================================================
-       STEREO MOTION
-    ===================================================== */
-
-    /**
-     * Gust sweeps across space.
-     */
-
-    const stereo =
-      0.12 +
-      Math.random() * 0.45;
-
-    this.player.stopStereoDrift();
-
-    this.player.startStereoDrift(
-      stereo,
-      4000 + Math.random() * 9000
+      12
     );
   }
 
-  /* =======================================================
-     INTENSITY
-  ======================================================= */
+  // =======================================================
+  // INTENSITY
+  // =======================================================
 
   setIntensity(value) {
 
     value =
-      Math.max(0, Math.min(1, value));
+      Math.max(
+        0,
+        Math.min(1, value)
+      );
 
     this.intensity = value;
 
     const now =
       this.ctx.currentTime;
 
+    const energy =
+      Math.pow(value, 1.4);
+
+    // =====================================================
+    // SOURCE GAIN
+    // =====================================================
+
     /**
-     * Gust density scaling
+     * CRITICAL:
+     * gust layer should remain subtle.
      */
 
-    const playerGain =
-      0.15 +
-      value * 0.25;
+    const sourceGain =
+      0.004 +
+      energy * 0.04;
 
     this.player.setGain(
-      playerGain,
-      3
+      sourceGain,
+      6
     );
 
-    /**
-     * Strong wind =
-     * brighter gusts
-     */
+    // =====================================================
+    // SOURCE SMOOTHING
+    // =====================================================
 
-    const lpFreq =
-      1600 +
-      value * 3000;
+    const preLP =
+      1200 +
+      energy * 2600;
 
-    this.lowpass.frequency
+    this.preLowpass.frequency
       .setTargetAtTime(
-        lpFreq,
+        preLP,
         now,
-        4
+        5
       );
 
-    /**
-     * More pressure body
-     */
+    // =====================================================
+    // LOW CLEANUP
+    // =====================================================
 
-    const hpFreq =
-      220 -
-      value * 70;
+    const hp =
+      70 +
+      energy * 50;
 
     this.highpass.frequency
       .setTargetAtTime(
-        hpFreq,
+        hp,
         now,
-        4
+        5
       );
   }
 
-  /* =======================================================
-     ENVIRONMENT MODES
-  ======================================================= */
+  // =======================================================
+  // STATES
+  // =======================================================
 
   setCalm() {
-
     this.setIntensity(0.12);
   }
 
   setBreeze() {
-
     this.setIntensity(0.3);
   }
 
   setWindy() {
-
     this.setIntensity(0.58);
   }
 
   setStorm() {
-
     this.setIntensity(0.92);
   }
 
-  /* =======================================================
-     DESTROY
-  ======================================================= */
+  // =======================================================
+  // DESTROY
+  // =======================================================
 
   destroy() {
 
@@ -567,6 +545,6 @@ export default class GustStem {
       this.disconnect();
     } catch (_) {}
 
-    this.player.destroy();
+    this.player?.destroy?.();
   }
 }

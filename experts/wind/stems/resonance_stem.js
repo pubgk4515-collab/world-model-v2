@@ -1,65 +1,15 @@
 /**
  * stems/resonance_stem.js
  * =========================================================
- * Atmospheric Resonance System
+ * Continuous Atmospheric Resonance
  * =========================================================
  *
- * THIS FILE IS:
- * --------------
- * the soul of realism.
- *
- * WHY?
- * ----
- * Because real wind is NOT just noise.
- *
- * Real wind interacts with:
- * - gaps
- * - pipes
- * - trees
- * - windows
- * - corners
- * - cavities
- * - structures
- *
- * THAT interaction creates:
- *
- *   subtle flute-like tones
- *
- * which humans subconsciously recognize as:
- *
- *   "real moving air"
- *
- * IMPORTANT:
- * ----------
- * If overdone:
- *
- * ❌ sci-fi synth
- * ❌ horror ambience
- * ❌ ghost sounds
- *
- * If done correctly:
- *
- * ✅ believable air resonance
- * ✅ emotional realism
- * ✅ cinematic atmosphere
- *
- * RULE:
- * -----
- * Resonance should be:
- *
- *   FELT more than heard.
- *
- * CPU:
- * ----
- * Extremely lightweight.
- *
- * We use:
- * - one pink noise source
- * - narrow filters
- * - occasional activation
- *
- * instead of:
- * heavy physical modelling.
+ * Philosophy:
+ * - resonance should emerge from airflow
+ * - never sound like synth whistles
+ * - no random "events"
+ * - always subtle
+ * - cinematic cavity realism
  */
 
 import StemPlayer from '../engine/stem_player.js';
@@ -74,26 +24,27 @@ export default class ResonanceStem {
 
     this.ctx = ctx;
 
-    /* =====================================================
-       OUTPUT
-    ===================================================== */
+    // =====================================================
+    // OUTPUT
+    // =====================================================
 
     this.output =
       ctx.createGain();
 
-    this.output.gain.value = 1;
+    this.output.gain.value =
+      1;
 
-    /* =====================================================
-       SOURCE
-    ===================================================== */
+    // =====================================================
+    // SOURCE
+    // =====================================================
+
+    /**
+     * Pink noise works best for
+     * cavity excitation.
+     */
 
     const buffers =
       getNoiseBuffers(ctx);
-
-    /**
-     * Pink noise excites
-     * resonance naturally.
-     */
 
     this.player =
       new StemPlayer(
@@ -101,13 +52,30 @@ export default class ResonanceStem {
         buffers.pink
       );
 
-    /* =====================================================
-       FILTER BANK
-    ===================================================== */
+    // =====================================================
+    // SOURCE SMOOTHING
+    // =====================================================
 
     /**
-     * Remove mud
+     * CRITICAL:
+     * remove hiss BEFORE resonance.
      */
+
+    this.preLowpass =
+      ctx.createBiquadFilter();
+
+    this.preLowpass.type =
+      'lowpass';
+
+    this.preLowpass.frequency.value =
+      2400;
+
+    this.preLowpass.Q.value =
+      0.4;
+
+    // =====================================================
+    // SUB CLEANUP
+    // =====================================================
 
     this.highpass =
       ctx.createBiquadFilter();
@@ -116,126 +84,133 @@ export default class ResonanceStem {
       'highpass';
 
     this.highpass.frequency.value =
-      400;
+      220;
+
+    this.highpass.Q.value =
+      0.5;
+
+    // =====================================================
+    // MAIN CAVITY
+    // =====================================================
 
     /**
-     * Soft resonance body
+     * Lower Q = natural resonance
+     * instead of whistle tones.
      */
 
-    this.lowpass =
+    this.cavityA =
       ctx.createBiquadFilter();
 
-    this.lowpass.type =
-      'lowpass';
+    this.cavityA.type =
+      'peaking';
 
-    this.lowpass.frequency.value =
-      3200;
-
-    /**
-     * Main resonance cavity
-     */
-
-    this.resonanceA =
-      ctx.createBiquadFilter();
-
-    this.resonanceA.type =
-      'bandpass';
-
-    this.resonanceA.frequency.value =
+    this.cavityA.frequency.value =
       620;
 
-    this.resonanceA.Q.value =
-      10;
+    this.cavityA.Q.value =
+      1.4;
 
-    /**
-     * Secondary cavity
-     */
+    this.cavityA.gain.value =
+      0;
 
-    this.resonanceB =
+    // =====================================================
+    // SECONDARY AIR COLUMN
+    // =====================================================
+
+    this.cavityB =
       ctx.createBiquadFilter();
 
-    this.resonanceB.type =
-      'bandpass';
+    this.cavityB.type =
+      'peaking';
 
-    this.resonanceB.frequency.value =
-      1100;
+    this.cavityB.frequency.value =
+      1180;
 
-    this.resonanceB.Q.value =
-      12;
+    this.cavityB.Q.value =
+      1.2;
 
-    /**
-     * High airy whistle
-     */
+    this.cavityB.gain.value =
+      0;
 
-    this.resonanceC =
+    // =====================================================
+    // UPPER AIR
+    // =====================================================
+
+    this.airPeak =
       ctx.createBiquadFilter();
 
-    this.resonanceC.type =
-      'bandpass';
+    this.airPeak.type =
+      'peaking';
 
-    this.resonanceC.frequency.value =
-      1800;
+    this.airPeak.frequency.value =
+      1900;
 
-    this.resonanceC.Q.value =
-      14;
+    this.airPeak.Q.value =
+      1.0;
 
-    /**
-     * Soft resonance body gain
-     */
+    this.airPeak.gain.value =
+      0;
+
+    // =====================================================
+    // FINAL TONE
+    // =====================================================
+
+    this.finalLowpass =
+      ctx.createBiquadFilter();
+
+    this.finalLowpass.type =
+      'lowpass';
+
+    this.finalLowpass.frequency.value =
+      3400;
+
+    this.finalLowpass.Q.value =
+      0.5;
+
+    // =====================================================
+    // RESONANCE GAIN
+    // =====================================================
 
     this.resonanceGain =
       ctx.createGain();
 
     /**
-     * VERY IMPORTANT
-     *
-     * Tiny default level.
+     * IMPORTANT:
+     * Much lower baseline.
      */
 
     this.resonanceGain.gain.value =
-      0.0;
+      0;
 
-    /* =====================================================
-       SIGNAL CHAIN
-    ===================================================== */
+    // =====================================================
+    // SIGNAL CHAIN
+    // =====================================================
 
     this.player.connect(
+      this.preLowpass
+    );
+
+    this.preLowpass.connect(
       this.highpass
     );
 
     this.highpass.connect(
-      this.lowpass
+      this.cavityA
     );
 
-    /**
-     * Parallel cavities
-     */
-
-    this.lowpass.connect(
-      this.resonanceA
+    this.cavityA.connect(
+      this.cavityB
     );
 
-    this.lowpass.connect(
-      this.resonanceB
+    this.cavityB.connect(
+      this.airPeak
     );
 
-    this.lowpass.connect(
-      this.resonanceC
+    this.airPeak.connect(
+      this.finalLowpass
     );
 
-    /**
-     * Merge
-     */
-
-    this.resonanceA.connect(
-      this.resonanceGain
-    );
-
-    this.resonanceB.connect(
-      this.resonanceGain
-    );
-
-    this.resonanceC.connect(
+    this.finalLowpass.connect(
       this.resonanceGain
     );
 
@@ -243,20 +218,21 @@ export default class ResonanceStem {
       this.output
     );
 
-    /* =====================================================
-       STATE
-    ===================================================== */
+    // =====================================================
+    // STATE
+    // =====================================================
 
-    this.intensity = 0.3;
+    this.intensity = 0.18;
 
     this.isRunning = false;
 
-    this.resonanceTimer = null;
+    this.motionPhase =
+      Math.random() * Math.PI * 2;
   }
 
-  /* =======================================================
-     START
-  ======================================================= */
+  // =======================================================
+  // START
+  // =======================================================
 
   start() {
 
@@ -265,47 +241,30 @@ export default class ResonanceStem {
     this.player.start();
 
     /**
-     * VERY low source level.
+     * EXTREMELY low source floor.
      */
 
-    this.player.setGain(0.08);
-
-    /**
-     * Slow stereo movement.
-     */
-
-    this.player.startStereoDrift(
-      0.3,
-      15000
+    this.player.setGain(
+      0.01
     );
 
-    /**
-     * Begin resonance events.
-     */
-
-    this.scheduleNextResonance();
+    this.player.startStereoDrift(
+      0.06,
+      32000
+    );
 
     this.isRunning = true;
   }
 
-  /* =======================================================
-     STOP
-  ======================================================= */
+  // =======================================================
+  // STOP
+  // =======================================================
 
   stop() {
 
     this.isRunning = false;
 
-    if (this.resonanceTimer) {
-
-      clearTimeout(
-        this.resonanceTimer
-      );
-
-      this.resonanceTimer = null;
-    }
-
-    this.player.stop(4);
+    this.player.stop(5);
 
     const now =
       this.ctx.currentTime;
@@ -314,13 +273,13 @@ export default class ResonanceStem {
       .setTargetAtTime(
         0,
         now,
-        2
+        3
       );
   }
 
-  /* =======================================================
-     CONNECT
-  ======================================================= */
+  // =======================================================
+  // CONNECT
+  // =======================================================
 
   connect(destination) {
     this.output.connect(destination);
@@ -330,222 +289,17 @@ export default class ResonanceStem {
     this.output.disconnect();
   }
 
-  /* =======================================================
-     RESONANCE SCHEDULER
-  ======================================================= */
-
-  /**
-   * Real resonance:
-   * rare
-   * unpredictable
-   * subtle
-   */
-
-  scheduleNextResonance() {
-
-    if (!this.isRunning) return;
-
-    /**
-     * Long random spacing.
-     */
-
-    const delay =
-      4000 +
-      Math.random() * 14000;
-
-    this.resonanceTimer =
-      setTimeout(() => {
-
-        this.triggerResonance();
-
-        this.scheduleNextResonance();
-
-      }, delay);
-  }
-
-  /* =======================================================
-     RESONANCE EVENT
-  ======================================================= */
-
-  triggerResonance() {
-
-    const now =
-      this.ctx.currentTime;
-
-    /**
-     * Intensity scaling.
-     */
-
-    const intensity =
-      this.intensity;
-
-    /**
-     * Strong wind =
-     * stronger cavities.
-     */
-
-    const targetGain =
-      0.005 +
-      intensity * 0.045 +
-      Math.random() * 0.02;
-
-    /**
-     * Long soft movement.
-     */
-
-    const rise =
-      2 +
-      Math.random() * 4;
-
-    const fall =
-      4 +
-      Math.random() * 8;
-
-    /* =====================================================
-       RANDOM CAVITY TUNING
-    ===================================================== */
-
-    /**
-     * THIS is where:
-     * flute realism happens.
-     *
-     * Tiny moving resonances.
-     */
-
-    const freqA =
-      450 +
-      Math.random() * 350;
-
-    const freqB =
-      900 +
-      Math.random() * 500;
-
-    const freqC =
-      1400 +
-      Math.random() * 900;
-
-    this.resonanceA.frequency
-      .setTargetAtTime(
-        freqA,
-        now,
-        3
-      );
-
-    this.resonanceB.frequency
-      .setTargetAtTime(
-        freqB,
-        now,
-        3
-      );
-
-    this.resonanceC.frequency
-      .setTargetAtTime(
-        freqC,
-        now,
-        3
-      );
-
-    /**
-     * Slight Q drift.
-     */
-
-    this.resonanceA.Q
-      .setTargetAtTime(
-        8 + Math.random() * 5,
-        now,
-        3
-      );
-
-    this.resonanceB.Q
-      .setTargetAtTime(
-        10 + Math.random() * 6,
-        now,
-        3
-      );
-
-    this.resonanceC.Q
-      .setTargetAtTime(
-        12 + Math.random() * 8,
-        now,
-        3
-      );
-
-    /* =====================================================
-       ENVELOPE
-    ===================================================== */
-
-    const current =
-      this.resonanceGain.gain.value;
-
-    this.resonanceGain.gain
-      .cancelScheduledValues(now);
-
-    this.resonanceGain.gain
-      .setValueAtTime(
-        current,
-        now
-      );
-
-    /**
-     * Slow appearance.
-     */
-
-    this.resonanceGain.gain
-      .setTargetAtTime(
-        targetGain,
-        now,
-        rise * 0.35
-      );
-
-    /**
-     * Long soft fade.
-     */
-
-    this.resonanceGain.gain
-      .setTargetAtTime(
-        0,
-        now + rise,
-        fall * 0.4
-      );
-
-    /* =====================================================
-       PLAYBACK DRIFT
-    ===================================================== */
-
-    /**
-     * Tiny pitch movement.
-     */
-
-    const rate =
-      0.985 +
-      Math.random() * 0.04;
-
-    this.player.setPlaybackRate(
-      rate,
-      8
-    );
-
-    /* =====================================================
-       SPATIAL FEEL
-    ===================================================== */
-
-    const pan =
-      (Math.random() * 2 - 1) * 0.5;
-
-    this.player.setPan(
-      pan,
-      10
-    );
-  }
-
-  /* =======================================================
-     INTENSITY
-  ======================================================= */
+  // =======================================================
+  // INTENSITY
+  // =======================================================
 
   setIntensity(value) {
 
     value =
-      Math.max(0, Math.min(1, value));
+      Math.max(
+        0,
+        Math.min(1, value)
+      );
 
     this.intensity = value;
 
@@ -553,77 +307,202 @@ export default class ResonanceStem {
       this.ctx.currentTime;
 
     /**
-     * Stronger wind:
-     * brighter resonance.
+     * IMPORTANT:
+     * resonance emerges late.
      */
 
-    const lpFreq =
-      2200 +
-      value * 3200;
+    const emergence =
+      Math.max(
+        0,
+        (value - 0.18) / 0.82
+      );
 
-    this.lowpass.frequency
+    const energy =
+      Math.pow(
+        emergence,
+        1.4
+      );
+
+    // =====================================================
+    // SOURCE GAIN
+    // =====================================================
+
+    const sourceGain =
+      0.004 +
+      energy * 0.035;
+
+    this.player.setGain(
+      sourceGain,
+      8
+    );
+
+    // =====================================================
+    // RESONANCE OUTPUT
+    // =====================================================
+
+    /**
+     * MUCH more subtle than before.
+     */
+
+    const outputGain =
+      energy * 0.09;
+
+    this.resonanceGain.gain
       .setTargetAtTime(
-        lpFreq,
+        outputGain,
+        now,
+        4
+      );
+
+    // =====================================================
+    // SOURCE SMOOTHING
+    // =====================================================
+
+    const preLP =
+      1800 +
+      energy * 2600;
+
+    this.preLowpass.frequency
+      .setTargetAtTime(
+        preLP,
         now,
         5
       );
 
-    /**
-     * More pressure body.
-     */
+    // =====================================================
+    // LOW CLEANUP
+    // =====================================================
 
-    const hpFreq =
-      500 -
-      value * 180;
+    const hp =
+      220 -
+      energy * 80;
 
     this.highpass.frequency
       .setTargetAtTime(
-        hpFreq,
+        hp,
         now,
         5
       );
 
+    // =====================================================
+    // ORGANIC DRIFT
+    // =====================================================
+
+    this.motionPhase +=
+      0.00008 +
+      value * 0.00004;
+
+    const drift =
+      Math.sin(
+        this.motionPhase
+      ) * 24;
+
+    // =====================================================
+    // CAVITY TUNING
+    // =====================================================
+
+    this.cavityA.frequency
+      .setTargetAtTime(
+        620 + drift,
+        now,
+        4
+      );
+
+    this.cavityB.frequency
+      .setTargetAtTime(
+        1180 + drift * 0.6,
+        now,
+        4
+      );
+
+    this.airPeak.frequency
+      .setTargetAtTime(
+        1900 + drift * 0.4,
+        now,
+        4
+      );
+
+    // =====================================================
+    // RESONANCE STRENGTH
+    // =====================================================
+
     /**
-     * Source energy.
+     * Felt more than heard.
      */
 
-    const playerGain =
-      0.04 +
-      value * 0.12;
+    this.cavityA.gain
+      .setTargetAtTime(
+        energy * 5.2,
+        now,
+        4
+      );
 
-    this.player.setGain(
-      playerGain,
-      6
+    this.cavityB.gain
+      .setTargetAtTime(
+        energy * 3.6,
+        now,
+        4
+      );
+
+    this.airPeak.gain
+      .setTargetAtTime(
+        energy * 1.8,
+        now,
+        4
+      );
+
+    // =====================================================
+    // FINAL TONE
+    // =====================================================
+
+    const tone =
+      2400 +
+      energy * 2200;
+
+    this.finalLowpass.frequency
+      .setTargetAtTime(
+        tone,
+        now,
+        4
+      );
+
+    // =====================================================
+    // MOTION
+    // =====================================================
+
+    const rate =
+      0.992 +
+      value * 0.02;
+
+    this.player.setPlaybackRate(
+      rate,
+      12
     );
   }
 
-  /* =======================================================
-     ATMOSPHERIC STATES
-  ======================================================= */
+  // =======================================================
+  // STATES
+  // =======================================================
 
   setCalm() {
-
     this.setIntensity(0.08);
   }
 
   setBreeze() {
-
     this.setIntensity(0.25);
   }
 
   setWindy() {
-
     this.setIntensity(0.6);
   }
 
   setStorm() {
-
     this.setIntensity(1.0);
   }
 
-  /* =======================================================
-     DESTROY
-  ======================================================= */
+  // =======================================================
+  // DESTROY
+  // =======================================================
 
   destroy() {
 
@@ -633,6 +512,6 @@ export default class ResonanceStem {
       this.disconnect();
     } catch (_) {}
 
-    this.player.destroy();
+    this.player?.destroy?.();
   }
 }

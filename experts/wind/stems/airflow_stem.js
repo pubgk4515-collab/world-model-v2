@@ -1,40 +1,15 @@
 /**
  * stems/airflow_stem.js
  * =========================================================
- * Primary Wind Airflow Stem
+ * Physically-Smoothed Airflow Stem
  * =========================================================
  *
- * THIS IS THE MOST IMPORTANT STEM.
- *
- * Why?
- * ----
- * Because real wind realism mostly comes from:
- *
- *   continuous believable airflow
- *
- * NOT:
- * - storms
- * - whistles
- * - crazy effects
- *
- * GOALS:
- * ------
- * 1. Soft endless air movement
- * 2. No TV static feeling
- * 3. No harsh hiss
- * 4. Warm evolving airflow
- * 5. Gentle at low intensity
- * 6. Strong body at high intensity
- *
- * IMPORTANT:
- * ----------
- * This stem should feel:
- *
- * LOW intensity:
- *   "soft moving air"
- *
- * HIGH intensity:
- *   "heavy atmospheric pressure"
+ * Goals:
+ * - eliminate low-level hiss
+ * - preserve soft atmospheric motion
+ * - support flute-like bloom resonance
+ * - darker low intensity
+ * - pressure body at high intensity
  */
 
 import StemPlayer from '../engine/stem_player.js';
@@ -49,28 +24,19 @@ export default class AirflowStem {
 
     this.ctx = ctx;
 
-    /* =====================================================
-       OUTPUT
-    ===================================================== */
+    // =====================================================
+    // OUTPUT
+    // =====================================================
 
     this.output = ctx.createGain();
     this.output.gain.value = 1;
 
-    /* =====================================================
-       NOISE SOURCE
-    ===================================================== */
+    // =====================================================
+    // SOURCE
+    // =====================================================
 
-    const buffers = getNoiseBuffers(ctx);
-
-    /**
-     * Brown noise is MUCH smoother than white noise.
-     *
-     * White noise:
-     *   TV static
-     *
-     * Brown noise:
-     *   deep airflow movement
-     */
+    const buffers =
+      getNoiseBuffers(ctx);
 
     this.player =
       new StemPlayer(
@@ -78,85 +44,169 @@ export default class AirflowStem {
         buffers.brown
       );
 
-    /* =====================================================
-       TONE SHAPING
-    ===================================================== */
+    // =====================================================
+    // PRE-TURBULENCE SMOOTHING
+    // =====================================================
 
     /**
-     * Highpass:
-     * removes muddy sub rumble
+     * CRITICAL FIX:
+     * Remove upper-band hiss BEFORE
+     * resonance shaping.
      */
+
+    this.preLowpass =
+      ctx.createBiquadFilter();
+
+    this.preLowpass.type =
+      'lowpass';
+
+    this.preLowpass.frequency.value =
+      2400;
+
+    this.preLowpass.Q.value = 0.4;
+
+    // =====================================================
+    // SUB CLEANUP
+    // =====================================================
 
     this.highpass =
       ctx.createBiquadFilter();
 
-    this.highpass.type = 'highpass';
-    this.highpass.frequency.value = 110;
-    this.highpass.Q.value = 0.7;
+    this.highpass.type =
+      'highpass';
 
-    /**
-     * Main airflow body
-     */
+    this.highpass.frequency.value =
+      45;
 
-    this.lowpass =
-      ctx.createBiquadFilter();
+    this.highpass.Q.value = 0.5;
 
-    this.lowpass.type = 'lowpass';
-    this.lowpass.frequency.value = 4200;
-    this.lowpass.Q.value = 0.6;
-
-    /**
-     * Gentle low-mid body
-     *
-     * This creates:
-     * "air mass"
-     */
+    // =====================================================
+    // AIR MASS
+    // =====================================================
 
     this.bodyEQ =
       ctx.createBiquadFilter();
 
-    this.bodyEQ.type = 'lowshelf';
-    this.bodyEQ.frequency.value = 260;
-    this.bodyEQ.gain.value = 3;
+    this.bodyEQ.type =
+      'lowshelf';
+
+    this.bodyEQ.frequency.value =
+      210;
+
+    this.bodyEQ.gain.value =
+      4;
+
+    // =====================================================
+    // FLUTE CAVITY
+    // =====================================================
 
     /**
-     * Soft air presence
+     * THIS is the missing piece.
+     *
+     * Real wind gets tonal bloom from:
+     * - cavities
+     * - openings
+     * - pressure resonances
      */
 
-    this.presenceEQ =
+    this.cavityPeak =
       ctx.createBiquadFilter();
 
-    this.presenceEQ.type = 'peaking';
-    this.presenceEQ.frequency.value = 1200;
-    this.presenceEQ.Q.value = 0.8;
-    this.presenceEQ.gain.value = 1.5;
+    this.cavityPeak.type =
+      'peaking';
 
-    /* =====================================================
-       SIGNAL CHAIN
-    ===================================================== */
+    this.cavityPeak.frequency.value =
+      640;
 
-    this.player.connect(this.highpass);
+    this.cavityPeak.Q.value =
+      1.8;
 
-    this.highpass.connect(this.lowpass);
+    this.cavityPeak.gain.value =
+      0;
 
-    this.lowpass.connect(this.bodyEQ);
+    // =====================================================
+    // SECONDARY BLOOM
+    // =====================================================
 
-    this.bodyEQ.connect(this.presenceEQ);
+    this.airBloom =
+      ctx.createBiquadFilter();
 
-    this.presenceEQ.connect(this.output);
+    this.airBloom.type =
+      'peaking';
 
-    /* =====================================================
-       STATE
-    ===================================================== */
+    this.airBloom.frequency.value =
+      1180;
 
-    this.intensity = 0.3;
+    this.airBloom.Q.value =
+      1.2;
+
+    this.airBloom.gain.value =
+      0;
+
+    // =====================================================
+    // FINAL TONE
+    // =====================================================
+
+    this.finalLowpass =
+      ctx.createBiquadFilter();
+
+    this.finalLowpass.type =
+      'lowpass';
+
+    this.finalLowpass.frequency.value =
+      4200;
+
+    this.finalLowpass.Q.value =
+      0.5;
+
+    // =====================================================
+    // SIGNAL CHAIN
+    // =====================================================
+
+    this.player.connect(
+      this.preLowpass
+    );
+
+    this.preLowpass.connect(
+      this.highpass
+    );
+
+    this.highpass.connect(
+      this.bodyEQ
+    );
+
+    this.bodyEQ.connect(
+      this.cavityPeak
+    );
+
+    this.cavityPeak.connect(
+      this.airBloom
+    );
+
+    this.airBloom.connect(
+      this.finalLowpass
+    );
+
+    this.finalLowpass.connect(
+      this.output
+    );
+
+    // =====================================================
+    // STATE
+    // =====================================================
+
+    this.intensity = 0.18;
 
     this.isRunning = false;
+
+    // slow organic modulation
+    this.motionPhase =
+      Math.random() * Math.PI * 2;
   }
 
-  /* =======================================================
-     START
-  ======================================================= */
+  // =======================================================
+  // START
+  // =======================================================
 
   start() {
 
@@ -165,46 +215,40 @@ export default class AirflowStem {
     this.player.start();
 
     /**
-     * Initial ultra-soft state
+     * MUCH lower startup floor.
+     *
+     * Removes permanent hiss bed.
      */
 
-    this.player.setGain(0.12);
-
-    /**
-     * Slow atmospheric motion
-     */
+    this.player.setGain(0.015);
 
     this.player.startBreathing(
-      0.10,
-      0.16
+      0.015,
+      0.028
     );
 
-    /**
-     * Slow stereo movement
-     */
-
     this.player.startStereoDrift(
-      0.18,
-      18000
+      0.08,
+      24000
     );
 
     this.isRunning = true;
   }
 
-  /* =======================================================
-     STOP
-  ======================================================= */
+  // =======================================================
+  // STOP
+  // =======================================================
 
   stop() {
 
-    this.player.stop(3.0);
+    this.player.stop(4);
 
     this.isRunning = false;
   }
 
-  /* =======================================================
-     CONNECT
-  ======================================================= */
+  // =======================================================
+  // CONNECT
+  // =======================================================
 
   connect(destination) {
     this.output.connect(destination);
@@ -214,241 +258,239 @@ export default class AirflowStem {
     this.output.disconnect();
   }
 
-  /* =======================================================
-     INTENSITY
-  ======================================================= */
-
-  /**
-   * THE MOST IMPORTANT METHOD.
-   *
-   * This controls:
-   * - airflow strength
-   * - spectral weight
-   * - air pressure feeling
-   * - smoothness
-   */
+  // =======================================================
+  // INTENSITY
+  // =======================================================
 
   setIntensity(value) {
 
-    /**
-     * Clamp
-     */
-
     value =
-      Math.max(0, Math.min(1, value));
+      Math.max(
+        0,
+        Math.min(1, value)
+      );
 
     this.intensity = value;
 
-    const now = this.ctx.currentTime;
-
-    /* =====================================================
-       GAIN
-    ===================================================== */
+    const now =
+      this.ctx.currentTime;
 
     /**
-     * VERY important:
+     * NONLINEAR ENERGY
      *
-     * Low intensity should remain soft.
-     *
-     * Avoid:
-     * "always storm"
+     * Keeps low-end softer.
+     */
+
+    const energy =
+      Math.pow(value, 1.9);
+
+    // =====================================================
+    // MASTER GAIN
+    // =====================================================
+
+    /**
+     * CRITICAL:
+     * ultra low floor at calm states
      */
 
     const gain =
-      0.05 +
-      Math.pow(value, 1.8) * 0.55;
+      0.008 +
+      energy * 0.42;
 
     this.player.setGain(
       gain,
-      4
+      6
     );
 
-    /* =====================================================
-       LOWPASS
-    ===================================================== */
+    // =====================================================
+    // PRE SMOOTHING
+    // =====================================================
 
     /**
-     * Low intensity:
-     * darker
-     *
-     * High intensity:
-     * brighter
+     * Removes hiss before bloom.
      */
 
-    const lowpassFreq =
-      1800 +
-      value * 5000;
+    const preLP =
+      1400 +
+      energy * 5200;
 
-    this.lowpass.frequency
+    this.preLowpass.frequency
       .setTargetAtTime(
-        lowpassFreq,
+        preLP,
         now,
-        2.5
+        3.5
       );
 
-    /* =====================================================
-       HIGHPASS
-    ===================================================== */
+    // =====================================================
+    // FINAL TONE
+    // =====================================================
 
-    /**
-     * Higher intensity =
-     * more pressure body
-     */
+    const finalTone =
+      2600 +
+      energy * 4800;
 
-    const highpassFreq =
-      140 -
-      value * 60;
+    this.finalLowpass.frequency
+      .setTargetAtTime(
+        finalTone,
+        now,
+        3
+      );
+
+    // =====================================================
+    // SUB CLEANUP
+    // =====================================================
+
+    const hp =
+      45 +
+      energy * 30;
 
     this.highpass.frequency
       .setTargetAtTime(
-        highpassFreq,
+        hp,
         now,
-        3
+        4
       );
 
-    /* =====================================================
-       BODY EQ
-    ===================================================== */
+    // =====================================================
+    // BODY MASS
+    // =====================================================
 
-    /**
-     * Storm intensity
-     * increases air mass feeling
-     */
-
-    const bodyGain =
+    const body =
       2 +
-      value * 7;
+      energy * 8;
 
     this.bodyEQ.gain
       .setTargetAtTime(
-        bodyGain,
+        body,
         now,
-        3
+        4
       );
 
-    /* =====================================================
-       PRESENCE
-    ===================================================== */
+    // =====================================================
+    // FLUTE BLOOM
+    // =====================================================
 
     /**
-     * Slight upper-air detail
+     * Only emerges after airflow exists.
+     *
+     * Prevents fake whistling.
      */
 
-    const presenceGain =
-      1 +
-      value * 2.5;
+    const bloomStart =
+      Math.max(
+        0,
+        (value - 0.16) / 0.84
+      );
 
-    this.presenceEQ.gain
+    const cavityGain =
+      bloomStart * 7;
+
+    const bloomGain =
+      bloomStart * 4.2;
+
+    this.motionPhase +=
+      0.00012 +
+      value * 0.00008;
+
+    const drift =
+      Math.sin(
+        this.motionPhase
+      ) * 18;
+
+    this.cavityPeak.frequency
       .setTargetAtTime(
-        presenceGain,
+        640 + drift,
         now,
-        3
+        2
       );
 
-    /* =====================================================
-       PLAYBACK RATE
-    ===================================================== */
+    this.airBloom.frequency
+      .setTargetAtTime(
+        1180 + drift * 0.5,
+        now,
+        2
+      );
 
-    /**
-     * Strong wind feels faster/heavier.
-     */
+    this.cavityPeak.gain
+      .setTargetAtTime(
+        cavityGain,
+        now,
+        2.8
+      );
+
+    this.airBloom.gain
+      .setTargetAtTime(
+        bloomGain,
+        now,
+        2.8
+      );
+
+    // =====================================================
+    // PLAYBACK MOTION
+    // =====================================================
 
     const playbackRate =
-      0.97 +
-      value * 0.08;
+      0.985 +
+      value * 0.045;
 
     this.player.setPlaybackRate(
       playbackRate,
-      8
+      10
     );
 
-    /* =====================================================
-       STEREO WIDTH
-    ===================================================== */
+    // =====================================================
+    // STEREO
+    // =====================================================
 
-    /**
-     * Bigger wind moves wider.
-     */
-
-    const stereoAmount =
-      0.12 +
-      value * 0.35;
+    const stereo =
+      0.05 +
+      value * 0.22;
 
     this.player.stopStereoDrift();
 
     this.player.startStereoDrift(
-      stereoAmount,
-      15000
+      stereo,
+      26000
     );
 
-    /* =====================================================
-       BREATHING
-    ===================================================== */
-
-    /**
-     * Stronger wind =
-     * stronger pressure movement
-     */
+    // =====================================================
+    // BREATHING
+    // =====================================================
 
     this.player.stopBreathing();
 
-    const minBreath =
-      gain * 0.82;
-
-    const maxBreath =
-      gain * 1.15;
-
     this.player.startBreathing(
-      minBreath,
-      maxBreath
+      gain * 0.92,
+      gain * (
+        1.05 +
+        value * 0.08
+      )
     );
   }
 
-  /* =======================================================
-     ATMOSPHERIC STATES
-  ======================================================= */
+  // =======================================================
+  // STATES
+  // =======================================================
 
   setCalm() {
-
-    this.setIntensity(0.15);
-
-    this.lowpass.frequency
-      .setTargetAtTime(
-        2200,
-        this.ctx.currentTime,
-        5
-      );
+    this.setIntensity(0.12);
   }
 
   setBreeze() {
-
     this.setIntensity(0.32);
   }
 
   setWindy() {
-
     this.setIntensity(0.58);
   }
 
   setStorm() {
-
-    this.setIntensity(0.9);
-
-    /**
-     * Slight extra darkness
-     */
-
-    this.lowpass.frequency
-      .setTargetAtTime(
-        5200,
-        this.ctx.currentTime,
-        3
-      );
+    this.setIntensity(0.92);
   }
 
-  /* =======================================================
-     DESTROY
-  ======================================================= */
+  // =======================================================
+  // DESTROY
+  // =======================================================
 
   destroy() {
 
@@ -458,6 +500,6 @@ export default class AirflowStem {
       this.disconnect();
     } catch (_) {}
 
-    this.player.destroy();
+    this.player?.destroy?.();
   }
 }

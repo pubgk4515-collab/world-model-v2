@@ -1,42 +1,22 @@
 /**
  * engine/stem_player.js
  * =========================================================
- * Universal Atmospheric Stem Player
+ * Cinematic Atmospheric Stem Engine
  * =========================================================
  *
- * PURPOSE:
- * --------
- * This system plays:
- * - airflow stems
- * - gust stems
- * - resonance stems
- * - texture stems
- *
- * RESPONSIBILITIES:
- * -----------------
- * 1. Seamless looping
- * 2. Smooth gain control
- * 3. CPU-cheap playback
- * 4. Soft pitch drift
- * 5. Stereo movement support
- * 6. Zero click transitions
- *
- * IMPORTANT:
- * ----------
- * This is NOT a simple audio player.
- *
- * This is:
- * "living atmospheric playback"
+ * Goals:
+ * - zero zipper noise
+ * - no modulation stacking
+ * - ultra smooth atmospheric motion
+ * - continuous drift instead of jumps
+ * - stable stereo image
+ * - cinematic airflow realism
  */
 
 import {
   createLoopingSource,
   randomPlaybackRate,
 } from '../utils/noise.js';
-
-/* =========================================================
-   STEM PLAYER
-========================================================= */
 
 export default class StemPlayer {
 
@@ -45,121 +25,167 @@ export default class StemPlayer {
     this.ctx = ctx;
     this.buffer = buffer;
 
-    /* =====================================================
-       OUTPUT
-    ===================================================== */
+    // =====================================================
+    // OUTPUT
+    // =====================================================
 
-    this.output = ctx.createGain();
+    this.output =
+      ctx.createGain();
+
     this.output.gain.value = 0;
 
-    /* =====================================================
-       INTERNAL GRAPH
-    ===================================================== */
+    // =====================================================
+    // INTERNAL GRAPH
+    // =====================================================
 
-    this.inputGain = ctx.createGain();
+    this.inputGain =
+      ctx.createGain();
 
-    this.filter = ctx.createBiquadFilter();
-    this.filter.type = 'lowpass';
-    this.filter.frequency.value = 20000;
+    this.filter =
+      ctx.createBiquadFilter();
 
-    this.stereo = ctx.createStereoPanner();
+    this.filter.type =
+      'lowpass';
+
+    this.filter.frequency.value =
+      20000;
+
+    this.filter.Q.value =
+      0.5;
+
+    this.stereo =
+      ctx.createStereoPanner();
+
     this.stereo.pan.value = 0;
 
-    this.inputGain.connect(this.filter);
-    this.filter.connect(this.stereo);
-    this.stereo.connect(this.output);
+    this.inputGain.connect(
+      this.filter
+    );
 
-    /* =====================================================
-       STATE
-    ===================================================== */
+    this.filter.connect(
+      this.stereo
+    );
+
+    this.stereo.connect(
+      this.output
+    );
+
+    // =====================================================
+    // STATE
+    // =====================================================
 
     this.source = null;
 
     this.isPlaying = false;
 
-    this.targetGain = 0;
+    this.baseGain = 0;
     this.currentRate = 1;
 
-    this.driftInterval = null;
+    // continuous motion
+    this.animationFrame = null;
+
+    // breathing
+    this.breathMin = 0;
+    this.breathMax = 0;
+    this.breathEnabled = false;
+
+    // stereo drift
+    this.stereoAmount = 0;
+    this.stereoEnabled = false;
+
+    // modulation phase
+    this.phaseA =
+      Math.random() * Math.PI * 2;
+
+    this.phaseB =
+      Math.random() * Math.PI * 2;
+
+    this.phaseC =
+      Math.random() * Math.PI * 2;
   }
 
-  /* =======================================================
-     CREATE SOURCE
-  ======================================================= */
+  // =======================================================
+  // SOURCE
+  // =======================================================
 
   _buildSource() {
 
-    const source = createLoopingSource(
-      this.ctx,
-      this.buffer
-    );
+    const source =
+      createLoopingSource(
+        this.ctx,
+        this.buffer
+      );
 
     source.playbackRate.value =
-      randomPlaybackRate(0.01);
+      randomPlaybackRate(0.003);
 
-    source.connect(this.inputGain);
+    source.connect(
+      this.inputGain
+    );
 
     return source;
   }
 
-  /* =======================================================
-     START
-  ======================================================= */
+  // =======================================================
+  // START
+  // =======================================================
 
   start() {
 
     if (this.isPlaying) return;
 
-    this.source = this._buildSource();
+    this.source =
+      this._buildSource();
 
     this.source.start();
 
     this.isPlaying = true;
 
-    this._startMicroDrift();
+    this._startMotionLoop();
   }
 
-  /* =======================================================
-     STOP
-  ======================================================= */
+  // =======================================================
+  // STOP
+  // =======================================================
 
-  stop(fadeTime = 2.0) {
+  stop(fadeTime = 3) {
 
     if (!this.isPlaying) return;
 
-    const now = this.ctx.currentTime;
+    this.isPlaying = false;
 
-    this.output.gain.cancelScheduledValues(now);
+    const now =
+      this.ctx.currentTime;
 
-    this.output.gain.setTargetAtTime(
-      0,
-      now,
-      fadeTime * 0.25
-    );
+    this.output.gain
+      .cancelScheduledValues(now);
+
+    this.output.gain
+      .setTargetAtTime(
+        0,
+        now,
+        fadeTime * 0.45
+      );
 
     setTimeout(() => {
 
       try {
 
-        if (this.source) {
-          this.source.stop();
-          this.source.disconnect();
-        }
+        this.source?.stop?.();
+        this.source?.disconnect?.();
 
       } catch (_) {}
 
       this.source = null;
 
-    }, fadeTime * 1000 + 100);
+    }, fadeTime * 1000 + 120);
 
-    this.isPlaying = false;
-
-    this._stopMicroDrift();
+    this._stopMotionLoop();
   }
 
-  /* =======================================================
-     CONNECT
-  ======================================================= */
+  // =======================================================
+  // CONNECT
+  // =======================================================
 
   connect(destination) {
     this.output.connect(destination);
@@ -169,203 +195,266 @@ export default class StemPlayer {
     this.output.disconnect();
   }
 
-  /* =======================================================
-     GAIN
-  ======================================================= */
+  // =======================================================
+  // GAIN
+  // =======================================================
 
-  setGain(value, smooth = 2.0) {
+  setGain(value, smooth = 4) {
 
-    this.targetGain = value;
+    this.baseGain = value;
 
-    const now = this.ctx.currentTime;
+    const now =
+      this.ctx.currentTime;
 
-    this.output.gain.cancelScheduledValues(now);
+    this.output.gain
+      .cancelScheduledValues(now);
 
-    this.output.gain.setTargetAtTime(
-      value,
-      now,
-      smooth * 0.25
-    );
+    this.output.gain
+      .setTargetAtTime(
+        value,
+        now,
+        smooth * 0.35
+      );
   }
 
-  /* =======================================================
-     FILTER
-  ======================================================= */
+  // =======================================================
+  // FILTER
+  // =======================================================
 
-  setLowpass(freq, smooth = 3.0) {
+  setLowpass(freq, smooth = 4) {
 
-    const now = this.ctx.currentTime;
+    const now =
+      this.ctx.currentTime;
 
-    this.filter.frequency.cancelScheduledValues(now);
+    this.filter.frequency
+      .cancelScheduledValues(now);
 
-    this.filter.frequency.setTargetAtTime(
-      freq,
-      now,
-      smooth * 0.25
-    );
+    this.filter.frequency
+      .setTargetAtTime(
+        freq,
+        now,
+        smooth * 0.35
+      );
   }
 
-  /* =======================================================
-     STEREO
-  ======================================================= */
+  // =======================================================
+  // PAN
+  // =======================================================
 
-  setPan(value, smooth = 4.0) {
+  setPan(value, smooth = 6) {
 
-    const now = this.ctx.currentTime;
+    const now =
+      this.ctx.currentTime;
 
-    this.stereo.pan.cancelScheduledValues(now);
+    this.stereo.pan
+      .cancelScheduledValues(now);
 
-    this.stereo.pan.setTargetAtTime(
-      value,
-      now,
-      smooth * 0.25
-    );
+    this.stereo.pan
+      .setTargetAtTime(
+        value,
+        now,
+        smooth * 0.4
+      );
   }
 
-  /* =======================================================
-     PLAYBACK RATE
-  ======================================================= */
+  // =======================================================
+  // PLAYBACK RATE
+  // =======================================================
 
-  setPlaybackRate(rate, smooth = 6.0) {
+  setPlaybackRate(rate, smooth = 8) {
 
     if (!this.source) return;
 
-    const now = this.ctx.currentTime;
-
-    this.source.playbackRate.cancelScheduledValues(now);
-
-    this.source.playbackRate.setTargetAtTime(
-      rate,
-      now,
-      smooth * 0.25
-    );
-
     this.currentRate = rate;
-  }
 
-  /* =======================================================
-     MICRO DRIFT
-  ======================================================= */
+    const now =
+      this.ctx.currentTime;
 
-  /**
-   * Tiny ultra-slow pitch movement.
-   *
-   * This prevents:
-   * - machine feeling
-   * - static looping
-   * - repetition detection
-   */
+    this.source.playbackRate
+      .cancelScheduledValues(now);
 
-  _startMicroDrift() {
-
-    this._stopMicroDrift();
-
-    this.driftInterval = setInterval(() => {
-
-      if (!this.source) return;
-
-      const nextRate =
-        randomPlaybackRate(0.008);
-
-      this.setPlaybackRate(
-        nextRate,
-        8.0
+    this.source.playbackRate
+      .setTargetAtTime(
+        rate,
+        now,
+        smooth * 0.45
       );
-
-    }, 12000 + Math.random() * 10000);
   }
 
-  _stopMicroDrift() {
-
-    if (this.driftInterval) {
-
-      clearInterval(this.driftInterval);
-
-      this.driftInterval = null;
-    }
-  }
-
-  /* =======================================================
-     ATMOSPHERIC MOVEMENT
-  ======================================================= */
-
-  /**
-   * Slowly drift stereo position.
-   */
-
-  startStereoDrift(
-    amount = 0.25,
-    interval = 14000
-  ) {
-
-    this.stereoDrift = setInterval(() => {
-
-      const target =
-        (Math.random() * 2 - 1) * amount;
-
-      this.setPan(target, 10);
-
-    }, interval);
-  }
-
-  stopStereoDrift() {
-
-    if (this.stereoDrift) {
-
-      clearInterval(this.stereoDrift);
-
-      this.stereoDrift = null;
-    }
-  }
-
-  /* =======================================================
-     SOFT ATMOSPHERIC SWELL
-  ======================================================= */
-
-  /**
-   * Creates subtle breathing motion.
-   */
+  // =======================================================
+  // BREATHING
+  // =======================================================
 
   startBreathing(
-    minGain = 0.15,
-    maxGain = 0.3
+    minGain = 0.1,
+    maxGain = 0.2
   ) {
 
-    this.stopBreathing();
+    this.breathMin = minGain;
+    this.breathMax = maxGain;
 
-    this.breathingInterval = setInterval(() => {
-
-      const target =
-        minGain +
-        Math.random() *
-        (maxGain - minGain);
-
-      this.setGain(target, 8);
-
-    }, 9000 + Math.random() * 12000);
+    this.breathEnabled = true;
   }
 
   stopBreathing() {
 
-    if (this.breathingInterval) {
+    this.breathEnabled = false;
+  }
 
-      clearInterval(this.breathingInterval);
+  // =======================================================
+  // STEREO DRIFT
+  // =======================================================
 
-      this.breathingInterval = null;
+  startStereoDrift(
+    amount = 0.1
+  ) {
+
+    this.stereoAmount = amount;
+
+    this.stereoEnabled = true;
+  }
+
+  stopStereoDrift() {
+
+    this.stereoEnabled = false;
+
+    this.setPan(0, 12);
+  }
+
+  // =======================================================
+  // CONTINUOUS ATMOSPHERIC MOTION
+  // =======================================================
+
+  /**
+   * CRITICAL FIX:
+   *
+   * Replace interval jumps
+   * with continuous organic motion.
+   */
+
+  _startMotionLoop() {
+
+    this._stopMotionLoop();
+
+    const loop = () => {
+
+      if (!this.isPlaying) return;
+
+      const now =
+        this.ctx.currentTime;
+
+      // ================================================
+      // PHASE EVOLUTION
+      // ================================================
+
+      this.phaseA += 0.00017;
+      this.phaseB += 0.00009;
+      this.phaseC += 0.00005;
+
+      // ================================================
+      // BREATHING
+      // ================================================
+
+      if (this.breathEnabled) {
+
+        const blend =
+          (
+            Math.sin(this.phaseA) * 0.5 +
+            Math.sin(this.phaseB) * 0.35 +
+            Math.sin(this.phaseC) * 0.15
+          ) * 0.5 + 0.5;
+
+        const targetGain =
+          this.breathMin +
+          (
+            this.breathMax -
+            this.breathMin
+          ) * blend;
+
+        this.output.gain
+          .setTargetAtTime(
+            targetGain,
+            now,
+            3.5
+          );
+      }
+
+      // ================================================
+      // STEREO
+      // ================================================
+
+      if (this.stereoEnabled) {
+
+        const pan =
+          (
+            Math.sin(
+              this.phaseB * 0.7
+            ) * 0.7 +
+            Math.sin(
+              this.phaseC * 0.4
+            ) * 0.3
+          ) * this.stereoAmount;
+
+        this.stereo.pan
+          .setTargetAtTime(
+            pan,
+            now,
+            6
+          );
+      }
+
+      // ================================================
+      // MICRO PLAYBACK DRIFT
+      // ================================================
+
+      if (this.source) {
+
+        const drift =
+          Math.sin(
+            this.phaseA * 0.3
+          ) * 0.0025;
+
+        const targetRate =
+          this.currentRate + drift;
+
+        this.source.playbackRate
+          .setTargetAtTime(
+            targetRate,
+            now,
+            8
+          );
+      }
+
+      this.animationFrame =
+        requestAnimationFrame(loop);
+    };
+
+    loop();
+  }
+
+  _stopMotionLoop() {
+
+    if (this.animationFrame) {
+
+      cancelAnimationFrame(
+        this.animationFrame
+      );
+
+      this.animationFrame = null;
     }
   }
 
-  /* =======================================================
-     CLEANUP
-  ======================================================= */
+  // =======================================================
+  // CLEANUP
+  // =======================================================
 
   destroy() {
 
     this.stop();
 
-    this.stopStereoDrift();
-
     this.stopBreathing();
+
+    this.stopStereoDrift();
 
     try {
       this.disconnect();
