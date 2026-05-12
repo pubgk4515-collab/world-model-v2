@@ -69,10 +69,8 @@ export default class WindExpert {
     this.stereo =
       ctx.createStereoPanner();
 
-    // routing (stems + bloom + hiss filter)
+    // initial routing (will be updated after bloom setup)
     this.output.connect(this.masterTone);
-    this.bloomPeakVH.connect(this.masterTone);
-    this.hissReductionFilter.connect(this.masterTone);
     this.masterTone.connect(this.masterCompressor);
     this.masterCompressor.connect(this.stereo);
     this.stereo.connect(destination);
@@ -528,6 +526,11 @@ export default class WindExpert {
 
     this.worldEnclosure =
       state.enclosure ?? 'open';
+
+    // notify UI of pressure change
+    if (typeof this.onPressureChange === 'function') {
+      this.onPressureChange(this.worldPressure);
+    }
 
     // enclosed spaces reduce highs
 

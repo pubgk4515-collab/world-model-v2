@@ -96,10 +96,16 @@ function syncPressureUI(value) {
 
   if (pressureValue) {
     pressureValue.textContent = v.toFixed(2);
+  } else {
+    console.warn('[App] pressureValue element not found');
   }
 
   if (pressureSlider) {
     setRangeFill(pressureSlider, v);
+    // ensure slider value is in sync
+    pressureSlider.value = v.toString();
+  } else {
+    console.warn('[App] pressureSlider element not found');
   }
 }
 
@@ -225,15 +231,21 @@ function createExpertByType(type) {
 
 function addExpertToRack(expert, type) {
   if (!expert || !type) {
-    throw new Error('Expert instance is invalid.');
+    const msg = 'Expert instance is invalid.';
+    console.error('[App]', msg);
+    throw new Error(msg);
   }
 
   if (typeof expert.getUICard !== 'function') {
-    throw new Error('Expert is missing getUICard().');
+    const msg = 'Expert is missing getUICard().';
+    console.error('[App]', msg);
+    throw new Error(msg);
   }
 
   if (typeof expert.bindCardControls !== 'function') {
-    throw new Error('Expert is missing bindCardControls().');
+    const msg = 'Expert is missing bindCardControls().';
+    console.error('[App]', msg);
+    throw new Error(msg);
   }
 
   const wrapper = document.createElement('div');
@@ -241,11 +253,19 @@ function addExpertToRack(expert, type) {
 
   const card = wrapper.firstElementChild;
   if (!card) {
-    throw new Error('Failed to mount expert card.');
+    const msg = 'Failed to mount expert card.';
+    console.error('[App]', msg);
+    throw new Error(msg);
   }
 
   card.dataset.id = card.dataset.id || expert.id || type;
   card.dataset.expertType = type;
+
+  if (!expertRack) {
+    const msg = 'expertRack element not found.';
+    console.error('[App]', msg);
+    throw new Error(msg);
+  }
 
   expertRack.appendChild(card);
 
@@ -277,10 +297,11 @@ if (pressureSlider) {
         void initEngine();
       }
     } catch (err) {
-      console.error(err);
-      alert('Slider update error: ' + err.message);
+      console.error('[App] Slider update error:', err);
     }
   });
+} else {
+  console.warn('[App] pressureSlider not found during initialization');
 }
 
 if (enclosureSelect) {
@@ -306,10 +327,11 @@ if (addLayerBtn) {
       openModal();
       refreshStatusTiles();
     } catch (err) {
-      console.error(err);
-      alert('Failed to open expert sheet: ' + err.message);
+      console.error('[App] Failed to open expert sheet:', err);
     }
   });
+} else {
+  console.warn('[App] addLayerBtn not found during initialization');
 }
 
 if (layerModal) {
@@ -319,8 +341,7 @@ if (layerModal) {
         closeModal();
       }
     } catch (err) {
-      console.error(err);
-      alert('Modal dismissal error: ' + err.message);
+      console.error('[App] Modal dismissal error:', err);
     }
   });
 
@@ -367,13 +388,13 @@ if (layerModal) {
       closeModal();
       refreshStatusTiles();
     } catch (err) {
-      console.error(err);
-      alert('Cannot add expert: ' + err.message);
+      console.error('[App] Cannot add expert:', err);
     }
   });
+} else {
+  console.warn('[App] layerModal element not found');
 }
 
-// ---------------------------------------------------------------------------
 // Expert Removal via Event Delegation
 // ---------------------------------------------------------------------------
 if (expertRack) {
@@ -398,6 +419,20 @@ if (expertRack) {
 
       card.style.opacity = '0';
       card.style.transform = 'scale(0.96) translateY(12px)';
+
+      setTimeout(() => {
+        card.remove();
+        refreshStatusTiles();
+      }, 180);
+
+      console.log(`🗑️ Expert removed: ${type}`);
+    } catch (err) {
+      console.error('[App] Error removing expert:', err);
+    }
+  });
+} else {
+  console.warn('[App] expertRack element not found');
+}
 
       setTimeout(() => {
         card.remove();

@@ -399,6 +399,16 @@ export function build(
 // DEFAULT EXPORT
 // -----------------------------------------------------------------------------
 
+export function createPromptBuilder() {
+
+    return {
+
+        build,
+
+        buildArchitectPrompt
+    };
+}
+
 export default {
 
     build,
