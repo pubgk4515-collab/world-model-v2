@@ -1,32 +1,34 @@
 // experts/rain/synthesis/transient_synth.js
-// Symbiote Ultra-Soft Rain Texture Engine
+// Symbiote Natural Rain Texture Engine
 //
-// THIS VERSION FIXES:
+// TARGET:
 //
-// - sharp attacks
-// - tak tak tak
-// - percussion identity
-// - clicky onset perception
-// - discrete impact feeling
+// not:
+// TAK TAK TAK
 //
-// CORE IDEA:
+// not:
+// ultra blurry fog mush
 //
-// REAL RAIN ≠ impacts
+// but:
+// soft realistic rain particles
 //
-// REAL RAIN =
-// soft stochastic texture wash
+// KEY FIXES:
 //
-// IMPORTANT CHANGE:
+// - shorter drop duration
+// - softer transient edge
+// - controlled mid sharpness
+// - less muddy
+// - less drum body
+// - less xylophone pitch
+// - more realistic rain grit
 //
-// we intentionally BLUR the transient.
+// DESIGN:
 //
-// no sharp edges.
-// no clear onset.
-// no hard peaks.
+// real rain impacts are:
+// broadband + short + random
 //
-// this is now:
-// "texture synthesis"
-// NOT percussion synthesis.
+// NOT:
+// tonal resonant objects
 
 export class TransientSynth {
 
@@ -38,63 +40,63 @@ export class TransientSynth {
 
     this.output = null;
 
-    this.masterLowpass = null;
-
-    this.masterCompressor = null;
-
     this.isConnected = false;
 
     this.isInitialized = false;
 
     // =====================================================
-    // TEXTURE CHARACTER
+    // CHARACTER
     // =====================================================
 
-    // MUCH LOWER
+    // IMPORTANT:
+    // lower center frequency
+    // removes xylophone feel
 
-    this.baseFrequency = 260;
+    this.baseFrequency = 340;
 
-    this.frequencyVariance = 140;
+    this.frequencyVariance = 160;
 
     // IMPORTANT:
-    // quieter = softer
+    // balanced level
 
-    this.outputGain = 0.018;
+    this.outputGain = 0.026;
 
     // =====================================================
     // ENVELOPE
     // =====================================================
 
-    // THIS IS THE BIG FIX
+    // THIS IS THE MAIN FIX
 
-    // very slow fade-in
-    // removes attack perception
+    // old:
+    // too sharp
 
-    this.attackTime = 0.040;
+    // previous:
+    // too blurry
 
-    // smooth texture bloom
+    // now:
+    // balanced
 
-    this.decayTime = 0.080;
+    this.attackTime = 0.010;
 
-    this.releaseTime = 0.12;
+    this.decayTime = 0.030;
+
+    this.releaseTime = 0.045;
 
     // =====================================================
     // TEXTURE
     // =====================================================
 
-    this.darkness = 0.72;
+    this.darkness = 0.58;
 
-    this.softness = 0.94;
-
-    this.stereoSpread = 0.16;
+    this.stereoSpread = 0.18;
 
     // =====================================================
     // SAFETY
     // =====================================================
 
-    this.minFrequency = 120;
+    this.minFrequency = 160;
 
-    this.maxFrequency = 1200;
+    this.maxFrequency = 1600;
 
     this.noiseBuffer = null;
   }
@@ -114,62 +116,14 @@ export class TransientSynth {
     this.output =
       this.audioContext.createGain();
 
-    this.output.gain.value = 1.0;
+    // softer overall texture
 
-    // =====================================================
-    // MASTER SOFTENING
-    // =====================================================
-
-    // THIS is the huge realism fix
-
-    this.masterLowpass =
-      this.audioContext.createBiquadFilter();
-
-    this.masterLowpass.type =
-      'lowpass';
-
-    this.masterLowpass.frequency.value =
-      1400;
-
-    this.masterLowpass.Q.value =
-      0.03;
-
-    // compressor smooths peaks
-
-    this.masterCompressor =
-      this.audioContext.createDynamicsCompressor();
-
-    this.masterCompressor.threshold.value =
-      -32;
-
-    this.masterCompressor.knee.value =
-      30;
-
-    this.masterCompressor.ratio.value =
-      2;
-
-    this.masterCompressor.attack.value =
-      0.04;
-
-    this.masterCompressor.release.value =
-      0.25;
-
-    // =====================================================
-    // ROUTING
-    // =====================================================
-
-    this.output.connect(
-      this.masterLowpass
-    );
-
-    this.masterLowpass.connect(
-      this.masterCompressor
-    );
+    this.output.gain.value = 0.9;
 
     this.isInitialized = true;
 
     console.log(
-      '[RAIN] Ultra-soft rain engine initialized'
+      '[RAIN] Natural rain engine initialized'
     );
   }
 
@@ -183,47 +137,39 @@ export class TransientSynth {
       this.audioContext.sampleRate;
 
     const bufferSize =
-      sampleRate * 3;
+      sampleRate * 2;
 
     const buffer =
       this.audioContext.createBuffer(
-        2,
+        1,
         bufferSize,
         sampleRate
       );
 
-    for (let ch = 0; ch < 2; ch++) {
+    const data =
+      buffer.getChannelData(0);
 
-      const data =
-        buffer.getChannelData(ch);
+    let brown = 0;
 
-      let brown = 0;
+    for (let i = 0; i < bufferSize; i++) {
 
-      let ultraSlow = 0;
+      const white =
+        Math.random() * 2 - 1;
 
-      for (let i = 0; i < bufferSize; i++) {
+      // smoother darker noise
 
-        const white =
-          Math.random() * 2 - 1;
+      brown +=
+        (white - brown) * 0.015;
 
-        // VERY SMOOTH random walk
+      // IMPORTANT:
+      // mostly brown
+      // little white
 
-        brown +=
-          (white - brown) * 0.008;
-
-        ultraSlow =
-          ultraSlow * 0.999 +
-          brown * 0.001;
-
-        // dark soft noise
-
-        data[i] =
-          (
-            brown * 0.72 +
-            ultraSlow * 0.22 +
-            white * 0.06
-          ) * 0.7;
-      }
+      data[i] =
+        (
+          brown * 0.82 +
+          white * 0.18
+        ) * 0.7;
     }
 
     this.noiseBuffer = buffer;
@@ -249,25 +195,20 @@ export class TransientSynth {
         this.audioContext.destination;
     }
 
-    if (
-      this.masterCompressor
-    ) {
+    try {
 
-      try {
+      this.output.disconnect();
 
-        this.masterCompressor.disconnect();
+    } catch (_) {}
 
-      } catch (_) {}
-
-      this.masterCompressor.connect(
-        this.destination
-      );
-    }
+    this.output.connect(
+      this.destination
+    );
 
     this.isConnected = true;
 
     console.log(
-      '[RAIN] Ultra-soft rain engine connected'
+      '[RAIN] Natural rain engine connected'
     );
   }
 
@@ -277,7 +218,7 @@ export class TransientSynth {
 
     try {
 
-      this.masterCompressor?.disconnect();
+      this.output.disconnect();
 
     } catch (_) {}
   }
@@ -298,27 +239,22 @@ export class TransientSynth {
     const now =
       this.audioContext.currentTime;
 
-    // =====================================================
-    // MUCH HIGHER CLOUD COUNT
-    // =====================================================
+    // IMPORTANT:
+    // fewer particles now
 
-    // THIS is another critical realism fix
-
-    // more overlap
-    // less individual identity
+    // too many =
+    // mush blur
 
     const particles =
-      8 +
+      3 +
       Math.floor(
-        Math.random() * 12
+        Math.random() * 4
       );
 
     for (let i = 0; i < particles; i++) {
 
-      // MUCH WIDER TIME BLUR
-
       const offset =
-        Math.random() * 0.09;
+        Math.random() * 0.028;
 
       const frequency =
         this.clamp(
@@ -357,11 +293,12 @@ export class TransientSynth {
       this.noiseBuffer;
 
     // IMPORTANT:
-    // random playback destroys repetition
+    // more randomness
+    // less repetition
 
     source.playbackRate.value =
-      0.82 +
-      Math.random() * 0.28;
+      0.92 +
+      Math.random() * 0.22;
 
     // =====================================================
     // FILTERS
@@ -383,23 +320,21 @@ export class TransientSynth {
       this.audioContext.createStereoPanner();
 
     // =====================================================
-    // REMOVE DRUM BODY
+    // REMOVE DRUM LOWS
     // =====================================================
 
     highpass.type =
       'highpass';
 
     highpass.frequency.value =
-      260;
+      240;
 
     highpass.Q.value =
-      0.01;
+      0.02;
 
     // =====================================================
-    // VERY WIDE BANDPASS
+    // MAIN TEXTURE SHAPE
     // =====================================================
-
-    // LOW Q is EXTREMELY important
 
     bandpass.type =
       'bandpass';
@@ -407,8 +342,11 @@ export class TransientSynth {
     bandpass.frequency.value =
       frequency;
 
+    // IMPORTANT:
+    // low Q removes pitch
+
     bandpass.Q.value =
-      0.015;
+      0.045;
 
     // =====================================================
     // DARK TOP
@@ -418,10 +356,11 @@ export class TransientSynth {
       'lowpass';
 
     lowpass.frequency.value =
-      900;
+      1250 -
+      (this.darkness * 400);
 
     lowpass.Q.value =
-      0.01;
+      0.02;
 
     // =====================================================
     // PAN
@@ -435,8 +374,8 @@ export class TransientSynth {
     // ENVELOPE
     // =====================================================
 
-    // MASSIVE FIX:
-    // NO FAST ATTACKS
+    // IMPORTANT:
+    // shorter duration now
 
     const attackEnd =
       now + this.attackTime;
@@ -448,28 +387,26 @@ export class TransientSynth {
       decayEnd + this.releaseTime;
 
     // IMPORTANT:
-    // begin ABOVE zero
-    // avoids perceived click transient
+    // begin above zero
 
     gain.gain.setValueAtTime(
-      0.002,
+      0.001,
       now
     );
 
-    // VERY slow rise
+    // IMPORTANT:
+    // soft but NOT blurry
 
     gain.gain.linearRampToValueAtTime(
 
       this.outputGain *
-      (0.8 + Math.random() * 0.4),
+      (0.85 + Math.random() * 0.3),
 
       attackEnd
     );
 
-    // smooth fade
-
     gain.gain.exponentialRampToValueAtTime(
-      0.003,
+      0.004,
       decayEnd
     );
 
@@ -493,10 +430,6 @@ export class TransientSynth {
     gain.connect(panner);
 
     panner.connect(this.output);
-
-    // =====================================================
-    // START
-    // =====================================================
 
     source.start(now);
 
@@ -540,13 +473,6 @@ export class TransientSynth {
 
     this.darkness =
       this.clamp(value, 0, 1);
-
-    if (this.masterLowpass) {
-
-      this.masterLowpass.frequency.value =
-        1600 -
-        (this.darkness * 900);
-    }
   }
 
   // =====================================================
@@ -562,7 +488,7 @@ export class TransientSynth {
     this.isInitialized = false;
 
     console.log(
-      '[RAIN] Ultra-soft rain engine disposed'
+      '[RAIN] Natural rain engine disposed'
     );
   }
 }
