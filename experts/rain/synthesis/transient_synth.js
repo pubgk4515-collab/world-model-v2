@@ -76,11 +76,11 @@ export class TransientSynth {
     // now:
     // balanced
 
-    this.attackTime = 0.010;
+    this.attackTime = 0.006;
 
-    this.decayTime = 0.030;
+    this.decayTime = 0.014;
 
-    this.releaseTime = 0.045;
+    this.releaseTime = 0.018;
 
     // =====================================================
     // TEXTURE
@@ -246,9 +246,9 @@ export class TransientSynth {
     // mush blur
 
     const particles =
-      3 +
+      2 +
       Math.floor(
-        Math.random() * 4
+        Math.random() * 3
       );
 
     for (let i = 0; i < particles; i++) {
@@ -406,12 +406,12 @@ export class TransientSynth {
     );
 
     gain.gain.exponentialRampToValueAtTime(
-      0.004,
+      0.0015,
       decayEnd
     );
 
     gain.gain.exponentialRampToValueAtTime(
-      0.001,
+      0.0001,
       releaseEnd
     );
 
@@ -433,7 +433,9 @@ export class TransientSynth {
 
     source.start(now);
 
-    source.stop(releaseEnd);
+    source.stop(
+  releaseEnd + 0.005
+   );
   }
 
   // =====================================================
