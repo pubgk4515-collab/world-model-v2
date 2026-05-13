@@ -1,94 +1,78 @@
 // experts/rain/synthesis/transient_synth.js
 // Symbiote Noise-Based Cinematic Rain Transient Synth
 //
-// HUGE ARCHITECTURE SHIFT:
+// IMPORTANT SHIFT:
+// Rain should feel like broadband wet texture,
+// not like a pitched instrument.
 //
-// OLD:
-// oscillator-centric rain
-//
-// NEW:
-// noise-transient-centric rain
-//
-// WHY:
-// Real rain is broadband chaotic energy,
-// NOT stable musical pitch.
-//
-// GOALS:
-// - remove instrument/xylophone feel
-// - realistic rain texture
-// - soft chaotic impacts
-// - cinematic wet atmosphere
-// - mobile-safe
-// - low CPU
-// - zero harsh ringing
+// DESIGN GOALS:
+// - remove xylophone / dhol / toy feel
+// - make impacts noise-dominant
+// - keep low-mid body subtle
+// - preserve cinematic wet texture
+// - stay mobile-safe
+// - keep CPU low
 
 export class TransientSynth {
-
   constructor(audioContext) {
-
     this.audioContext = audioContext;
 
     this.destination = null;
-
     this.isConnected = false;
-
     this.isInitialized = false;
 
     // =====================================================
     // CORE CHARACTER
     // =====================================================
 
-    this.baseFrequency = 180;
+    // Lowered so the impact center sits in a rain-like zone,
+    // not a musical one.
+    this.baseFrequency = 220;
+    this.frequencyVariance = 120;
 
-    this.frequencyVariance = 60;
-
-    this.outputGain = 0.12;
+    this.outputGain = 0.11;
 
     // =====================================================
     // ENVELOPE
     // =====================================================
 
-    this.attackTime = 0.008;
-
-    this.decayTime = 0.05;
-
-    this.releaseTime = 0.09;
+    this.attackTime = 0.0025;
+    this.decayTime = 0.045;
+    this.releaseTime = 0.085;
 
     // =====================================================
     // ATMOSPHERE
     // =====================================================
 
     this.wetness = 0.65;
-
-    this.resonance = 0.18;
-
-    this.bloom = 0.12;
-
-    this.darkness = 0.55;
-
+    this.resonance = 0.14;
+    this.bloom = 0.08;
+    this.darkness = 0.58;
     this.softness = 0.82;
-
     this.air = 0.28;
 
     // =====================================================
     // SPATIAL
     // =====================================================
 
-    this.stereoSpread = 0.18;
+    this.stereoSpread = 0.22;
 
     // =====================================================
     // SAFETY
     // =====================================================
 
-    this.maxFrequency = 2200;
-
-    this.minFrequency = 80;
+    this.maxFrequency = 1400;
+    this.minFrequency = 70;
 
     // =====================================================
     // NOISE BUFFER
     // =====================================================
 
     this.noiseBuffer = null;
+    this.bufferLengthSeconds = 2.0;
+
+    // master output bus
+    this.output = null;
   }
 
   // =====================================================
@@ -96,18 +80,16 @@ export class TransientSynth {
   // =====================================================
 
   init() {
-
-    if (this.isInitialized) {
-      return;
-    }
+    if (this.isInitialized) return;
 
     this.createNoiseBuffer();
 
+    this.output = this.audioContext.createGain();
+    this.output.gain.value = 1.0;
+
     this.isInitialized = true;
 
-    console.log(
-      '[RAIN] Noise-based TransientSynth initialized'
-    );
+    console.log('[RAIN] Noise-based TransientSynth initialized');
   }
 
   // =====================================================
@@ -115,39 +97,38 @@ export class TransientSynth {
   // =====================================================
 
   createNoiseBuffer() {
+    const sampleRate = this.audioContext.sampleRate;
+    const bufferSize = Math.floor(sampleRate * this.bufferLengthSeconds);
 
-    const bufferSize =
-      this.audioContext.sampleRate * 2;
+    // stereo buffer for slight decorrelation
+    const buffer = this.audioContext.createBuffer(2, bufferSize, sampleRate);
 
-    const buffer =
-      this.audioContext.createBuffer(
-        1,
-        bufferSize,
-        this.audioContext.sampleRate
-      );
+    for (let channel = 0; channel < 2; channel++) {
+      const data = buffer.getChannelData(channel);
 
-    const data =
-      buffer.getChannelData(0);
+      let brown = 0;
+      let smoother = 0;
 
-    // =====================================================
-    // DARK BROWN/PINK HYBRID
-    // =====================================================
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
 
-    let brown = 0;
+        // brown-ish smoothing
+        brown += (white - brown) * 0.018;
 
-    for (let i = 0; i < bufferSize; i++) {
+        // additional diffusion to avoid grainy hiss
+        smoother = smoother * 0.992 + brown * 0.008;
 
-      const white =
-        Math.random() * 2 - 1;
+        // very dark hybrid noise
+        const value = (white * 0.14) + (brown * 0.55) + (smoother * 0.31);
 
-      brown +=
-        (white - brown) * 0.018;
+        // slight channel decorrelation
+        const stereoOffset =
+          channel === 0
+            ? 1.0
+            : 0.985 + (Math.random() * 0.03);
 
-      // darker smoother noise
-
-      data[i] =
-        (white * 0.18) +
-        (brown * 0.82);
+        data[i] = value * stereoOffset;
+      }
     }
 
     this.noiseBuffer = buffer;
@@ -158,33 +139,33 @@ export class TransientSynth {
   // =====================================================
 
   connect(destination) {
-
-    if (
-      destination &&
-      typeof destination.connect ===
-      'function'
-    ) {
-
+    if (destination && typeof destination.connect === 'function') {
       this.destination = destination;
-
     } else {
+      this.destination = this.audioContext.destination;
+    }
 
-      this.destination =
-        this.audioContext.destination;
+    if (this.output) {
+      try {
+        this.output.disconnect();
+      } catch (_) {}
+      this.output.connect(this.destination);
     }
 
     this.isConnected = true;
 
-    console.log(
-      '[RAIN] TransientSynth connected'
-    );
+    console.log('[RAIN] TransientSynth connected');
   }
 
   disconnect() {
-
     this.destination = null;
-
     this.isConnected = false;
+
+    if (this.output) {
+      try {
+        this.output.disconnect();
+      } catch (_) {}
+    }
   }
 
   // =====================================================
@@ -192,82 +173,64 @@ export class TransientSynth {
   // =====================================================
 
   trigger(parameters = {}) {
-
-    if (
-      !this.isConnected ||
-      !this.destination
-    ) {
+    if (!this.isConnected || !this.destination || !this.noiseBuffer || !this.output) {
       return;
     }
 
-    const now =
-      this.audioContext.currentTime;
+    const now = this.audioContext.currentTime;
 
-    // =====================================================
-    // LOWER RANDOMIZED FREQUENCY
-    // =====================================================
-
-    const frequency =
-      Math.max(
-        this.minFrequency,
-        Math.min(
-          this.maxFrequency,
-
-          this.baseFrequency +
-
-          ((Math.random() - 0.5) *
-            this.frequencyVariance) +
-
-          (parameters.frequencyOffset || 0)
-        )
-      );
-
-    // =====================================================
-    // MAIN NOISE IMPACT
-    // =====================================================
-
-    this.createNoiseImpact(
-      now,
-      frequency,
-      parameters
+    const frequency = this._clamp(
+      this.baseFrequency +
+        ((Math.random() - 0.5) * this.frequencyVariance) +
+        (parameters.frequencyOffset || 0),
+      this.minFrequency,
+      this.maxFrequency
     );
 
-    // =====================================================
-    // LOW WET BODY
-    // =====================================================
+    const wetness = this._clamp(parameters.wetness ?? this.wetness, 0, 1);
+    const resonance = this._clamp(parameters.resonance ?? this.resonance, 0, 1);
+    const bloom = this._clamp(parameters.bloom ?? this.bloom, 0, 1);
+    const darkness = this._clamp(parameters.darkness ?? this.darkness, 0, 1);
+    const softness = this._clamp(parameters.softness ?? this.softness, 0, 1);
+    const air = this._clamp(parameters.air ?? this.air, 0, 1);
 
-    if (this.wetness > 0.15) {
+    // primary rain impact
+    this.createNoiseImpact(now, frequency, {
+      wetness,
+      resonance,
+      bloom,
+      darkness,
+      softness,
+      air,
+      ...parameters,
+    });
 
-      this.createWetBody(
-        now,
-        frequency,
-        parameters
-      );
+    // soft wet support body, but kept subtle so it doesn't turn into drums
+    if (wetness > 0.12) {
+      this.createWetBody(now, frequency, {
+        wetness,
+        darkness,
+        ...parameters,
+      });
     }
 
-    // =====================================================
-    // SOFT AIR BLOOM
-    // =====================================================
-
-    if (this.bloom > 0.05) {
-
-      this.createAirBloom(
-        now,
-        frequency,
-        parameters
-      );
+    // very subtle airy bloom
+    if (bloom > 0.05) {
+      this.createAirBloom(now, frequency, {
+        bloom,
+        air,
+        darkness,
+        ...parameters,
+      });
     }
 
-    // =====================================================
-    // MICRO REFLECTIONS
-    // =====================================================
-
-    if (this.softness > 0.4) {
-
-      this.createMicroReflections(
-        now,
-        frequency
-      );
+    // tiny micro reflections for realism
+    if (softness > 0.4) {
+      this.createMicroReflections(now, frequency, {
+        softness,
+        darkness,
+        ...parameters,
+      });
     }
   }
 
@@ -275,116 +238,69 @@ export class TransientSynth {
   // MAIN NOISE IMPACT
   // =====================================================
 
-  createNoiseImpact(
-    now,
-    frequency,
-    parameters
-  ) {
+  createNoiseImpact(now, frequency, parameters = {}) {
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    source.playbackRate.value = 0.92 + Math.random() * 0.14;
 
-    const source =
-      this.audioContext.createBufferSource();
+    const highpass = this.audioContext.createBiquadFilter();
+    const bandpass = this.audioContext.createBiquadFilter();
+    const lowpass = this.audioContext.createBiquadFilter();
+    const gain = this.audioContext.createGain();
+    const panner = this.audioContext.createStereoPanner();
 
-    source.buffer =
-      this.noiseBuffer;
+    const wetness = this._clamp(parameters.wetness ?? this.wetness, 0, 1);
+    const resonance = this._clamp(parameters.resonance ?? this.resonance, 0, 1);
+    const darkness = this._clamp(parameters.darkness ?? this.darkness, 0, 1);
+    const air = this._clamp(parameters.air ?? this.air, 0, 1);
+    const stereoSpread = this._clamp(parameters.stereoSpread ?? this.stereoSpread, 0, 1);
 
-    // =====================================================
-    // FILTERS
-    // =====================================================
-
-    const bandpass =
-      this.audioContext.createBiquadFilter();
-
-    const lowpass =
-      this.audioContext.createBiquadFilter();
-
-    const gain =
-      this.audioContext.createGain();
-
-    const panner =
-      this.audioContext.createStereoPanner();
-
-    // =====================================================
-    // RANDOMIZED IMPACT FILTERING
-    // =====================================================
-
-    bandpass.type =
-      'bandpass';
-
-    bandpass.frequency.value =
-      frequency;
-
-    // LOW Q = NON MUSICAL
-
-    bandpass.Q.value =
-      0.18;
-
-    lowpass.type =
-      'lowpass';
-
-    lowpass.frequency.value =
-      850 -
-      (this.darkness * 320);
-
-    lowpass.Q.value =
-      0.1;
-
-    // =====================================================
-    // PAN
-    // =====================================================
-
-    panner.pan.value =
-      (Math.random() - 0.5) *
-      this.stereoSpread;
-
-    // =====================================================
-    // ENVELOPE
-    // =====================================================
-
-    const attackEnd =
-      now + this.attackTime;
-
-    const decayEnd =
-      attackEnd + this.decayTime;
-
-    const releaseEnd =
-      decayEnd + this.releaseTime;
-
-    gain.gain.setValueAtTime(
-      0.0001,
-      now
+    // key change: keep the impact broad and non-musical
+    const center = this._clamp(
+      frequency * 0.72 + (Math.random() - 0.5) * 70,
+      120,
+      1100
     );
 
-    gain.gain.linearRampToValueAtTime(
-      this.outputGain,
-      attackEnd
-    );
+    const hpCutoff = 85 + (darkness * 90) + ((1 - wetness) * 35);
+    const lpCutoff = 1500 + (air * 900) - (darkness * 550);
 
-    gain.gain.exponentialRampToValueAtTime(
-      0.015,
-      decayEnd
-    );
+    highpass.type = 'highpass';
+    highpass.frequency.value = hpCutoff;
+    highpass.Q.value = 0.06;
 
-    gain.gain.exponentialRampToValueAtTime(
-      0.0001,
-      releaseEnd
-    );
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = center;
+    bandpass.Q.value = 0.12 + (resonance * 0.16); // low Q, wide texture
 
-    // =====================================================
-    // ROUTING
-    // =====================================================
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = this._clamp(lpCutoff, 700, 3200);
+    lowpass.Q.value = 0.08;
 
-    source.connect(bandpass);
+    panner.pan.value = (Math.random() - 0.5) * stereoSpread;
 
+    const attackEnd = now + this.attackTime;
+    const decayEnd = attackEnd + this.decayTime;
+    const releaseEnd = decayEnd + this.releaseTime;
+
+    const level =
+      this.outputGain *
+      (0.72 + wetness * 0.35) *
+      (0.85 + air * 0.15);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(level, attackEnd);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.008, level * 0.12), decayEnd);
+    gain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+
+    source.connect(highpass);
+    highpass.connect(bandpass);
     bandpass.connect(lowpass);
-
     lowpass.connect(gain);
-
     gain.connect(panner);
-
-    panner.connect(this.destination);
+    panner.connect(this.output);
 
     source.start(now);
-
     source.stop(releaseEnd);
   }
 
@@ -392,138 +308,97 @@ export class TransientSynth {
   // LOW WET BODY
   // =====================================================
 
-  createWetBody(
-    now,
-    frequency
-  ) {
+  createWetBody(now, frequency, parameters = {}) {
+    // tiny supporting body only — no drum-like mass
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    source.playbackRate.value = 0.88 + Math.random() * 0.08;
 
-    // subtle low-frequency body
-    // ONLY supporting layer now
+    const lowpass = this.audioContext.createBiquadFilter();
+    const bandpass = this.audioContext.createBiquadFilter();
+    const gain = this.audioContext.createGain();
+    const panner = this.audioContext.createStereoPanner();
 
-    const osc =
-      this.audioContext.createOscillator();
+    const wetness = this._clamp(parameters.wetness ?? this.wetness, 0, 1);
+    const darkness = this._clamp(parameters.darkness ?? this.darkness, 0, 1);
+    const stereoSpread = this._clamp(parameters.stereoSpread ?? this.stereoSpread, 0, 1);
 
-    const gain =
-      this.audioContext.createGain();
-
-    const lowpass =
-      this.audioContext.createBiquadFilter();
-
-    osc.type =
-      'triangle';
-
-    osc.frequency.value =
-      Math.max(
-        55,
-        frequency * 0.9
-      );
-
-    lowpass.type =
-      'lowpass';
-
-    lowpass.frequency.value =
-      420;
-
-    lowpass.Q.value =
-      0.05;
-
-    const end =
-      now + 0.08;
-
-    gain.gain.setValueAtTime(
-      0.0001,
-      now
+    const center = this._clamp(
+      frequency * 0.24,
+      110,
+      420
     );
 
-    gain.gain.linearRampToValueAtTime(
-      0.042 * this.wetness,
-      now + 0.004
-    );
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = center;
+    bandpass.Q.value = 0.08;
 
-    gain.gain.exponentialRampToValueAtTime(
-      0.0001,
-      end
-    );
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = this._clamp(620 - (darkness * 260), 180, 800);
+    lowpass.Q.value = 0.05;
 
-    osc.connect(lowpass);
+    panner.pan.value = (Math.random() - 0.5) * stereoSpread * 0.5;
 
-    lowpass.connect(gain);
+    const end = now + 0.07;
 
-    gain.connect(this.destination);
+    const level = 0.012 * wetness;
 
-    osc.start(now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(level, now + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
 
-    osc.stop(end);
+    source.connect(lowpass);
+    lowpass.connect(bandpass);
+    bandpass.connect(gain);
+    gain.connect(panner);
+    panner.connect(this.output);
+
+    source.start(now);
+    source.stop(end);
   }
 
   // =====================================================
   // AIR BLOOM
   // =====================================================
 
-  createAirBloom(
-    now,
-    frequency
-  ) {
+  createAirBloom(now, frequency, parameters = {}) {
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    source.playbackRate.value = 0.96 + Math.random() * 0.08;
 
-    const source =
-      this.audioContext.createBufferSource();
+    const bandpass = this.audioContext.createBiquadFilter();
+    const lowpass = this.audioContext.createBiquadFilter();
+    const gain = this.audioContext.createGain();
+    const panner = this.audioContext.createStereoPanner();
 
-    source.buffer =
-      this.noiseBuffer;
+    const bloom = this._clamp(parameters.bloom ?? this.bloom, 0, 1);
+    const air = this._clamp(parameters.air ?? this.air, 0, 1);
+    const darkness = this._clamp(parameters.darkness ?? this.darkness, 0, 1);
 
-    const bandpass =
-      this.audioContext.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = this._clamp(frequency * 0.92, 180, 1200);
+    bandpass.Q.value = 0.22;
 
-    const gain =
-      this.audioContext.createGain();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = this._clamp(2200 - (darkness * 600), 900, 2800);
+    lowpass.Q.value = 0.05;
 
-    const panner =
-      this.audioContext.createStereoPanner();
+    panner.pan.value = (Math.random() - 0.5) * 0.22;
 
-    bandpass.type =
-      'bandpass';
+    const start = now + 0.01;
+    const end = start + 0.1;
 
-    bandpass.frequency.value =
-      frequency * 0.9;
-
-    bandpass.Q.value =
-      0.4;
-
-    panner.pan.value =
-      (Math.random() - 0.5) *
-      0.3;
-
-    const start =
-      now + 0.01;
-
-    const end =
-      start + 0.12;
-
-    gain.gain.setValueAtTime(
-      0.0001,
-      start
-    );
-
-    gain.gain.linearRampToValueAtTime(
-      0.006 * this.bloom,
-      start + 0.02
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-      0.0001,
-      end
-    );
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(0.004 * bloom * (0.8 + air * 0.4), start + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
 
     source.connect(bandpass);
-
-    bandpass.connect(gain);
-
+    bandpass.connect(lowpass);
+    lowpass.connect(gain);
     gain.connect(panner);
-
-    panner.connect(this.destination);
+    panner.connect(this.output);
 
     source.start(start);
-
     source.stop(end);
   }
 
@@ -531,73 +406,45 @@ export class TransientSynth {
   // MICRO REFLECTIONS
   // =====================================================
 
-  createMicroReflections(
-    now,
-    frequency
-  ) {
+  createMicroReflections(now, frequency, parameters = {}) {
+    const softness = this._clamp(parameters.softness ?? this.softness, 0, 1);
+    const darkness = this._clamp(parameters.darkness ?? this.darkness, 0, 1);
 
-    const count =
-      1 +
-      Math.floor(
-        this.softness * 2
-      );
+    const count = 1 + Math.floor(softness * 2);
 
     for (let i = 0; i < count; i++) {
+      const source = this.audioContext.createBufferSource();
+      source.buffer = this.noiseBuffer;
+      source.playbackRate.value = 0.92 + Math.random() * 0.12;
 
-      const source =
-        this.audioContext.createBufferSource();
+      const filter = this.audioContext.createBiquadFilter();
+      const gain = this.audioContext.createGain();
+      const panner = this.audioContext.createStereoPanner();
 
-      source.buffer =
-        this.noiseBuffer;
+      const delay = Math.random() * 0.02;
+      const start = now + delay;
+      const end = start + 0.03 + Math.random() * 0.015;
 
-      const filter =
-        this.audioContext.createBiquadFilter();
-
-      const gain =
-        this.audioContext.createGain();
-
-      const delay =
-        Math.random() * 0.018;
-
-      const start =
-        now + delay;
-
-      const end =
-        start + 0.035;
-
-      filter.type =
-        'bandpass';
-
-      filter.frequency.value =
-        frequency *
-        (0.7 + Math.random() * 0.25);
-
-      filter.Q.value =
-        0.35;
-
-      gain.gain.setValueAtTime(
-        0.0001,
-        start
+      filter.type = 'bandpass';
+      filter.frequency.value = this._clamp(
+        frequency * (0.55 + Math.random() * 0.25),
+        120,
+        1200
       );
+      filter.Q.value = 0.18;
 
-      gain.gain.linearRampToValueAtTime(
-        0.0025,
-        start + 0.003
-      );
+      panner.pan.value = (Math.random() - 0.5) * 0.25;
 
-      gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        end
-      );
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(0.0022, start + 0.003);
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
 
       source.connect(filter);
-
       filter.connect(gain);
-
-      gain.connect(this.destination);
+      gain.connect(panner);
+      panner.connect(this.output);
 
       source.start(start);
-
       source.stop(end);
     }
   }
@@ -607,42 +454,37 @@ export class TransientSynth {
   // =====================================================
 
   setWetness(value) {
-
-    this.wetness =
-      Math.max(0, Math.min(1, value));
+    this.wetness = this._clamp(value, 0, 1);
   }
 
   setResonance(value) {
-
-    this.resonance =
-      Math.max(0, Math.min(1, value));
+    this.resonance = this._clamp(value, 0, 1);
   }
 
   setBloom(value) {
-
-    this.bloom =
-      Math.max(0, Math.min(1, value));
+    this.bloom = this._clamp(value, 0, 1);
   }
 
   setDarkness(value) {
-
-    this.darkness =
-      Math.max(0, Math.min(1, value));
+    this.darkness = this._clamp(value, 0, 1);
   }
 
   setSoftness(value) {
-
-    this.softness =
-      Math.max(0, Math.min(1, value));
+    this.softness = this._clamp(value, 0, 1);
   }
 
   setOutputGain(value) {
+    this.outputGain = this._clamp(value, 0.01, 1);
+  }
 
-    this.outputGain =
-      Math.max(
-        0.01,
-        Math.min(1, value)
-      );
+  // =====================================================
+  // HELPERS
+  // =====================================================
+
+  _clamp(value, min, max) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return min;
+    return Math.max(min, Math.min(max, n));
   }
 
   // =====================================================
@@ -650,15 +492,9 @@ export class TransientSynth {
   // =====================================================
 
   dispose() {
-
     this.disconnect();
-
     this.noiseBuffer = null;
-
     this.isInitialized = false;
-
-    console.log(
-      '[RAIN] TransientSynth disposed'
-    );
+    console.log('[RAIN] TransientSynth disposed');
   }
 }
