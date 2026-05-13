@@ -1,31 +1,26 @@
 // experts/rain/synthesis/transient_synth.js
-// Symbiote Cinematic Rain Transient Synth
+// Symbiote Noise-Based Cinematic Rain Transient Synth
 //
-// PURPOSE:
-// Realistic rain impact synthesis without toy/xylophone artifacts.
-//
-// DESIGN GOALS:
-// - darker rain texture
-// - believable low-mid droplet body
-// - soft cinematic bloom
-// - zero harsh resonance
-// - no glassy toy sound
-// - mobile-safe
-// - smooth atmospheric tails
-//
-// IMPORTANT:
-//
-// OLD PROBLEM:
-// frequencies were WAY too high.
+// HUGE ARCHITECTURE SHIFT:
 //
 // OLD:
-// 700Hz - 1500Hz+
+// oscillator-centric rain
 //
-// NEW TARGET:
-// 180Hz - 650Hz
+// NEW:
+// noise-transient-centric rain
 //
-// This instantly removes the
-// "toy percussion / xylophone" feeling.
+// WHY:
+// Real rain is broadband chaotic energy,
+// NOT stable musical pitch.
+//
+// GOALS:
+// - remove instrument/xylophone feel
+// - realistic rain texture
+// - soft chaotic impacts
+// - cinematic wet atmosphere
+// - mobile-safe
+// - low CPU
+// - zero harsh ringing
 
 export class TransientSynth {
 
@@ -43,57 +38,57 @@ export class TransientSynth {
     // CORE CHARACTER
     // =====================================================
 
-    // MUCH darker + lower
+    this.baseFrequency = 320;
 
-    this.baseFrequency = 280;
+    this.frequencyVariance = 140;
 
-    this.frequencyVariance = 110;
-
-    // softer envelope
-
-    this.attackTime = 0.004;
-
-    this.decayTime = 0.11;
-
-    this.releaseTime = 0.18;
-
-    // safer output
-
-    this.outputGain = 0.11;
+    this.outputGain = 0.12;
 
     // =====================================================
-    // ENVIRONMENT
+    // ENVELOPE
+    // =====================================================
+
+    this.attackTime = 0.002;
+
+    this.decayTime = 0.05;
+
+    this.releaseTime = 0.09;
+
+    // =====================================================
+    // ATMOSPHERE
     // =====================================================
 
     this.wetness = 0.65;
 
-    this.resonance = 0.28;
+    this.resonance = 0.18;
 
-    this.bloom = 0.18;
+    this.bloom = 0.12;
 
-    this.darkness = 0.62;
+    this.darkness = 0.55;
 
     this.softness = 0.82;
 
-    this.air = 0.36;
+    this.air = 0.28;
 
     // =====================================================
-    // RANDOMIZATION
+    // SPATIAL
     // =====================================================
 
     this.stereoSpread = 0.18;
-
-    this.pitchDrift = 0.04;
-
-    this.microVariation = 0.08;
 
     // =====================================================
     // SAFETY
     // =====================================================
 
-    this.maxFrequency = 1800;
+    this.maxFrequency = 2200;
 
     this.minFrequency = 80;
+
+    // =====================================================
+    // NOISE BUFFER
+    // =====================================================
+
+    this.noiseBuffer = null;
   }
 
   // =====================================================
@@ -106,11 +101,56 @@ export class TransientSynth {
       return;
     }
 
+    this.createNoiseBuffer();
+
     this.isInitialized = true;
 
     console.log(
-      '[RAIN] TransientSynth initialized'
+      '[RAIN] Noise-based TransientSynth initialized'
     );
+  }
+
+  // =====================================================
+  // NOISE BUFFER
+  // =====================================================
+
+  createNoiseBuffer() {
+
+    const bufferSize =
+      this.audioContext.sampleRate * 2;
+
+    const buffer =
+      this.audioContext.createBuffer(
+        1,
+        bufferSize,
+        this.audioContext.sampleRate
+      );
+
+    const data =
+      buffer.getChannelData(0);
+
+    // =====================================================
+    // DARK BROWN/PINK HYBRID
+    // =====================================================
+
+    let brown = 0;
+
+    for (let i = 0; i < bufferSize; i++) {
+
+      const white =
+        Math.random() * 2 - 1;
+
+      brown +=
+        (white - brown) * 0.018;
+
+      // darker smoother noise
+
+      data[i] =
+        (white * 0.18) +
+        (brown * 0.82);
+    }
+
+    this.noiseBuffer = buffer;
   }
 
   // =====================================================
@@ -128,10 +168,6 @@ export class TransientSynth {
       this.destination = destination;
 
     } else {
-
-      console.warn(
-        '[RAIN] Invalid destination, fallback used'
-      );
 
       this.destination =
         this.audioContext.destination;
@@ -161,11 +197,6 @@ export class TransientSynth {
       !this.isConnected ||
       !this.destination
     ) {
-
-      console.warn(
-        '[RAIN] trigger() without destination'
-      );
-
       return;
     }
 
@@ -173,17 +204,8 @@ export class TransientSynth {
       this.audioContext.currentTime;
 
     // =====================================================
-    // LOWER + DARKER FREQUENCY
+    // LOWER RANDOMIZED FREQUENCY
     // =====================================================
-
-    const randomOffset =
-      (Math.random() - 0.5) *
-      this.frequencyVariance;
-
-    const microOffset =
-      (Math.random() - 0.5) *
-      25 *
-      this.microVariation;
 
     const frequency =
       Math.max(
@@ -192,27 +214,29 @@ export class TransientSynth {
           this.maxFrequency,
 
           this.baseFrequency +
-          randomOffset +
-          microOffset +
+
+          ((Math.random() - 0.5) *
+            this.frequencyVariance) +
+
           (parameters.frequencyOffset || 0)
         )
       );
 
     // =====================================================
-    // MAIN BODY
+    // MAIN NOISE IMPACT
     // =====================================================
 
-    this.createMainTransient(
+    this.createNoiseImpact(
       now,
       frequency,
       parameters
     );
 
     // =====================================================
-    // WET BODY
+    // LOW WET BODY
     // =====================================================
 
-    if (this.wetness > 0.12) {
+    if (this.wetness > 0.15) {
 
       this.createWetBody(
         now,
@@ -222,12 +246,12 @@ export class TransientSynth {
     }
 
     // =====================================================
-    // SOFT BLOOM
+    // SOFT AIR BLOOM
     // =====================================================
 
-    if (this.resonance > 0.08) {
+    if (this.bloom > 0.05) {
 
-      this.createBloomTail(
+      this.createAirBloom(
         now,
         frequency,
         parameters
@@ -238,58 +262,71 @@ export class TransientSynth {
     // MICRO REFLECTIONS
     // =====================================================
 
-    if (this.softness > 0.45) {
+    if (this.softness > 0.4) {
 
       this.createMicroReflections(
         now,
-        frequency,
-        parameters
+        frequency
       );
     }
   }
 
   // =====================================================
-  // MAIN TRANSIENT
+  // MAIN NOISE IMPACT
   // =====================================================
 
-  createMainTransient(now, frequency) {
+  createNoiseImpact(
+    now,
+    frequency,
+    parameters
+  ) {
 
-    const osc =
-      this.audioContext.createOscillator();
+    const source =
+      this.audioContext.createBufferSource();
+
+    source.buffer =
+      this.noiseBuffer;
+
+    // =====================================================
+    // FILTERS
+    // =====================================================
+
+    const bandpass =
+      this.audioContext.createBiquadFilter();
+
+    const lowpass =
+      this.audioContext.createBiquadFilter();
 
     const gain =
       this.audioContext.createGain();
-
-    const filter =
-      this.audioContext.createBiquadFilter();
 
     const panner =
       this.audioContext.createStereoPanner();
 
     // =====================================================
-    // OSC
+    // RANDOMIZED IMPACT FILTERING
     // =====================================================
 
-    // IMPORTANT:
-    // triangle is MUCH softer
-    // than sine in this frequency range
+    bandpass.type =
+      'bandpass';
 
-    osc.type = 'triangle';
-
-    osc.frequency.value =
+    bandpass.frequency.value =
       frequency;
 
-    // =====================================================
-    // FILTER
-    // =====================================================
+    // LOW Q = NON MUSICAL
 
-    filter.type = 'lowpass';
+    bandpass.Q.value =
+      0.7;
 
-    filter.frequency.value =
-      1200 -
-      (this.darkness * 500);
+    lowpass.type =
+      'lowpass';
 
-    filter.Q.value = 0.45;
+    lowpass.frequency.value =
+      1800 -
+      (this.darkness * 900);
+
+    lowpass.Q.value =
+      0.1;
 
     // =====================================================
     // PAN
@@ -323,7 +360,7 @@ export class TransientSynth {
     );
 
     gain.gain.exponentialRampToValueAtTime(
-      0.012,
+      0.015,
       decayEnd
     );
 
@@ -336,24 +373,32 @@ export class TransientSynth {
     // ROUTING
     // =====================================================
 
-    osc.connect(filter);
+    source.connect(bandpass);
 
-    filter.connect(gain);
+    bandpass.connect(lowpass);
+
+    lowpass.connect(gain);
 
     gain.connect(panner);
 
     panner.connect(this.destination);
 
-    osc.start(now);
+    source.start(now);
 
-    osc.stop(releaseEnd);
+    source.stop(releaseEnd);
   }
 
   // =====================================================
-  // WET LOW BODY
+  // LOW WET BODY
   // =====================================================
 
-  createWetBody(now, frequency) {
+  createWetBody(
+    now,
+    frequency
+  ) {
+
+    // subtle low-frequency body
+    // ONLY supporting layer now
 
     const osc =
       this.audioContext.createOscillator();
@@ -364,25 +409,26 @@ export class TransientSynth {
     const lowpass =
       this.audioContext.createBiquadFilter();
 
-    // lower + darker
-
-    osc.type = 'triangle';
+    osc.type =
+      'triangle';
 
     osc.frequency.value =
       Math.max(
-        60,
-        frequency * 0.18
+        55,
+        frequency * 0.16
       );
 
-    lowpass.type = 'lowpass';
+    lowpass.type =
+      'lowpass';
 
     lowpass.frequency.value =
-      520;
+      420;
 
-    lowpass.Q.value = 0.1;
+    lowpass.Q.value =
+      0.05;
 
     const end =
-      now + 0.11;
+      now + 0.08;
 
     gain.gain.setValueAtTime(
       0.0001,
@@ -390,8 +436,8 @@ export class TransientSynth {
     );
 
     gain.gain.linearRampToValueAtTime(
-      0.028 * this.wetness,
-      now + 0.006
+      0.018 * this.wetness,
+      now + 0.004
     );
 
     gain.gain.exponentialRampToValueAtTime(
@@ -411,61 +457,47 @@ export class TransientSynth {
   }
 
   // =====================================================
-  // BLOOM TAIL
+  // AIR BLOOM
   // =====================================================
 
-  createBloomTail(now, frequency) {
+  createAirBloom(
+    now,
+    frequency
+  ) {
 
-    const osc =
-      this.audioContext.createOscillator();
+    const source =
+      this.audioContext.createBufferSource();
+
+    source.buffer =
+      this.noiseBuffer;
+
+    const bandpass =
+      this.audioContext.createBiquadFilter();
 
     const gain =
       this.audioContext.createGain();
 
-    const filter =
-      this.audioContext.createBiquadFilter();
-
     const panner =
       this.audioContext.createStereoPanner();
 
-    // IMPORTANT:
-    // softer airy tail
-    // not whistle resonance
+    bandpass.type =
+      'bandpass';
 
-    osc.type = 'sine';
-
-    osc.frequency.value =
-      frequency * 0.82;
-
-    filter.type = 'bandpass';
-
-    filter.frequency.value =
+    bandpass.frequency.value =
       frequency * 0.9;
 
-    // HUGE FIX:
-    // low Q prevents ringing
-
-    filter.Q.value = 1.8;
+    bandpass.Q.value =
+      0.4;
 
     panner.pan.value =
       (Math.random() - 0.5) *
-      0.25;
+      0.3;
 
     const start =
-      now + 0.012;
-
-    const peak =
-      start + 0.045;
+      now + 0.01;
 
     const end =
-      start +
-      0.16 +
-      (this.bloom * 0.12);
-
-    gain.gain.setValueAtTime(
-      0.0001,
-      now
-    );
+      start + 0.12;
 
     gain.gain.setValueAtTime(
       0.0001,
@@ -473,8 +505,8 @@ export class TransientSynth {
     );
 
     gain.gain.linearRampToValueAtTime(
-      0.008 * this.resonance,
-      peak
+      0.006 * this.bloom,
+      start + 0.02
     );
 
     gain.gain.exponentialRampToValueAtTime(
@@ -482,24 +514,27 @@ export class TransientSynth {
       end
     );
 
-    osc.connect(filter);
+    source.connect(bandpass);
 
-    filter.connect(gain);
+    bandpass.connect(gain);
 
     gain.connect(panner);
 
     panner.connect(this.destination);
 
-    osc.start(start);
+    source.start(start);
 
-    osc.stop(end);
+    source.stop(end);
   }
 
   // =====================================================
   // MICRO REFLECTIONS
   // =====================================================
 
-  createMicroReflections(now, frequency) {
+  createMicroReflections(
+    now,
+    frequency
+  ) {
 
     const count =
       1 +
@@ -509,37 +544,36 @@ export class TransientSynth {
 
     for (let i = 0; i < count; i++) {
 
-      const osc =
-        this.audioContext.createOscillator();
+      const source =
+        this.audioContext.createBufferSource();
 
-      const gain =
-        this.audioContext.createGain();
+      source.buffer =
+        this.noiseBuffer;
 
       const filter =
         this.audioContext.createBiquadFilter();
 
+      const gain =
+        this.audioContext.createGain();
+
       const delay =
-        Math.random() * 0.02;
+        Math.random() * 0.018;
 
       const start =
         now + delay;
 
       const end =
-        start + 0.05;
+        start + 0.035;
 
-      osc.type = 'triangle';
-
-      osc.frequency.value =
-        frequency *
-        (0.55 + Math.random() * 0.25);
-
-      filter.type = 'lowpass';
+      filter.type =
+        'bandpass';
 
       filter.frequency.value =
-        1000 -
-        (this.darkness * 400);
+        frequency *
+        (0.7 + Math.random() * 0.25);
 
-      filter.Q.value = 0.08;
+      filter.Q.value =
+        0.35;
 
       gain.gain.setValueAtTime(
         0.0001,
@@ -547,8 +581,8 @@ export class TransientSynth {
       );
 
       gain.gain.linearRampToValueAtTime(
-        0.0035,
-        start + 0.004
+        0.0025,
+        start + 0.003
       );
 
       gain.gain.exponentialRampToValueAtTime(
@@ -556,15 +590,15 @@ export class TransientSynth {
         end
       );
 
-      osc.connect(filter);
+      source.connect(filter);
 
       filter.connect(gain);
 
       gain.connect(this.destination);
 
-      osc.start(start);
+      source.start(start);
 
-      osc.stop(end);
+      source.stop(end);
     }
   }
 
@@ -618,6 +652,8 @@ export class TransientSynth {
   dispose() {
 
     this.disconnect();
+
+    this.noiseBuffer = null;
 
     this.isInitialized = false;
 
