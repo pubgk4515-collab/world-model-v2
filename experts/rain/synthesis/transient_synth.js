@@ -1,18 +1,36 @@
 // experts/rain/synthesis/transient_synth.js
-// Cinematic Rain Transient Synth
-// Generates believable rain impacts,
-// soft wet body resonance,
-// subtle flute-like bloom,
-// and non-harsh atmospheric tails.
+// Symbiote Cinematic Rain Transient Synth
 //
-// Designed for:
-// - mobile safety
-// - zero click transients
-// - cinematic realism
-// - soft immersive rain texture
+// PURPOSE:
+// Realistic rain impact synthesis without toy/xylophone artifacts.
+//
+// DESIGN GOALS:
+// - darker rain texture
+// - believable low-mid droplet body
+// - soft cinematic bloom
+// - zero harsh resonance
+// - no glassy toy sound
+// - mobile-safe
+// - smooth atmospheric tails
+//
+// IMPORTANT:
+//
+// OLD PROBLEM:
+// frequencies were WAY too high.
+//
+// OLD:
+// 700Hz - 1500Hz+
+//
+// NEW TARGET:
+// 180Hz - 650Hz
+//
+// This instantly removes the
+// "toy percussion / xylophone" feeling.
 
 export class TransientSynth {
+
   constructor(audioContext) {
+
     this.audioContext = audioContext;
 
     this.destination = null;
@@ -25,17 +43,23 @@ export class TransientSynth {
     // CORE CHARACTER
     // =====================================================
 
-    this.baseFrequency = 720;
+    // MUCH darker + lower
 
-    this.frequencyVariance = 240;
+    this.baseFrequency = 280;
 
-    this.attackTime = 0.003;
+    this.frequencyVariance = 110;
 
-    this.decayTime = 0.08;
+    // softer envelope
 
-    this.releaseTime = 0.16;
+    this.attackTime = 0.004;
 
-    this.outputGain = 0.14;
+    this.decayTime = 0.11;
+
+    this.releaseTime = 0.18;
+
+    // safer output
+
+    this.outputGain = 0.11;
 
     // =====================================================
     // ENVIRONMENT
@@ -43,33 +67,33 @@ export class TransientSynth {
 
     this.wetness = 0.65;
 
-    this.resonance = 0.35;
+    this.resonance = 0.28;
 
-    this.bloom = 0.25;
+    this.bloom = 0.18;
 
-    this.darkness = 0.45;
+    this.darkness = 0.62;
 
-    this.softness = 0.75;
+    this.softness = 0.82;
 
-    this.air = 0.4;
+    this.air = 0.36;
 
     // =====================================================
     // RANDOMIZATION
     // =====================================================
 
-    this.stereoSpread = 0.25;
+    this.stereoSpread = 0.18;
 
-    this.pitchDrift = 0.08;
+    this.pitchDrift = 0.04;
 
-    this.microVariation = 0.15;
+    this.microVariation = 0.08;
 
     // =====================================================
     // SAFETY
     // =====================================================
 
-    this.maxFrequency = 6000;
+    this.maxFrequency = 1800;
 
-    this.minFrequency = 90;
+    this.minFrequency = 80;
   }
 
   // =====================================================
@@ -77,11 +101,16 @@ export class TransientSynth {
   // =====================================================
 
   init() {
-    if (this.isInitialized) return;
+
+    if (this.isInitialized) {
+      return;
+    }
 
     this.isInitialized = true;
 
-    console.log('[RAIN] TransientSynth initialized');
+    console.log(
+      '[RAIN] TransientSynth initialized'
+    );
   }
 
   // =====================================================
@@ -89,18 +118,19 @@ export class TransientSynth {
   // =====================================================
 
   connect(destination) {
+
     if (
       destination &&
-      typeof destination.connect === 'function'
+      typeof destination.connect ===
+      'function'
     ) {
+
       this.destination = destination;
 
-      console.log(
-        '[RAIN] TransientSynth connected'
-      );
     } else {
+
       console.warn(
-        '[RAIN] Invalid destination, using audioContext.destination'
+        '[RAIN] Invalid destination, fallback used'
       );
 
       this.destination =
@@ -108,9 +138,14 @@ export class TransientSynth {
     }
 
     this.isConnected = true;
+
+    console.log(
+      '[RAIN] TransientSynth connected'
+    );
   }
 
   disconnect() {
+
     this.destination = null;
 
     this.isConnected = false;
@@ -121,9 +156,14 @@ export class TransientSynth {
   // =====================================================
 
   trigger(parameters = {}) {
-    if (!this.isConnected || !this.destination) {
+
+    if (
+      !this.isConnected ||
+      !this.destination
+    ) {
+
       console.warn(
-        '[RAIN] TransientSynth.trigger() without valid destination'
+        '[RAIN] trigger() without destination'
       );
 
       return;
@@ -133,7 +173,7 @@ export class TransientSynth {
       this.audioContext.currentTime;
 
     // =====================================================
-    // FREQUENCY
+    // LOWER + DARKER FREQUENCY
     // =====================================================
 
     const randomOffset =
@@ -142,7 +182,7 @@ export class TransientSynth {
 
     const microOffset =
       (Math.random() - 0.5) *
-      40 *
+      25 *
       this.microVariation;
 
     const frequency =
@@ -150,6 +190,7 @@ export class TransientSynth {
         this.minFrequency,
         Math.min(
           this.maxFrequency,
+
           this.baseFrequency +
           randomOffset +
           microOffset +
@@ -171,7 +212,8 @@ export class TransientSynth {
     // WET BODY
     // =====================================================
 
-    if (this.wetness > 0.15) {
+    if (this.wetness > 0.12) {
+
       this.createWetBody(
         now,
         frequency,
@@ -180,10 +222,11 @@ export class TransientSynth {
     }
 
     // =====================================================
-    // RESONANT BLOOM
+    // SOFT BLOOM
     // =====================================================
 
-    if (this.resonance > 0.1) {
+    if (this.resonance > 0.08) {
+
       this.createBloomTail(
         now,
         frequency,
@@ -195,7 +238,8 @@ export class TransientSynth {
     // MICRO REFLECTIONS
     // =====================================================
 
-    if (this.softness > 0.4) {
+    if (this.softness > 0.45) {
+
       this.createMicroReflections(
         now,
         frequency,
@@ -209,6 +253,7 @@ export class TransientSynth {
   // =====================================================
 
   createMainTransient(now, frequency) {
+
     const osc =
       this.audioContext.createOscillator();
 
@@ -225,7 +270,11 @@ export class TransientSynth {
     // OSC
     // =====================================================
 
-    osc.type = 'sine';
+    // IMPORTANT:
+    // triangle is MUCH softer
+    // than sine in this frequency range
+
+    osc.type = 'triangle';
 
     osc.frequency.value =
       frequency;
@@ -234,13 +283,13 @@ export class TransientSynth {
     // FILTER
     // =====================================================
 
-    filter.type = 'bandpass';
+    filter.type = 'lowpass';
 
     filter.frequency.value =
-      frequency;
+      1200 -
+      (this.darkness * 500);
 
-    filter.Q.value =
-      1.4;
+    filter.Q.value = 0.45;
 
     // =====================================================
     // PAN
@@ -274,7 +323,7 @@ export class TransientSynth {
     );
 
     gain.gain.exponentialRampToValueAtTime(
-      0.02,
+      0.012,
       decayEnd
     );
 
@@ -305,6 +354,7 @@ export class TransientSynth {
   // =====================================================
 
   createWetBody(now, frequency) {
+
     const osc =
       this.audioContext.createOscillator();
 
@@ -314,19 +364,25 @@ export class TransientSynth {
     const lowpass =
       this.audioContext.createBiquadFilter();
 
+    // lower + darker
+
     osc.type = 'triangle';
 
     osc.frequency.value =
-      frequency * 0.24;
+      Math.max(
+        60,
+        frequency * 0.18
+      );
 
     lowpass.type = 'lowpass';
 
-    lowpass.frequency.value = 850;
+    lowpass.frequency.value =
+      520;
 
-    lowpass.Q.value = 0.2;
+    lowpass.Q.value = 0.1;
 
     const end =
-      now + 0.08;
+      now + 0.11;
 
     gain.gain.setValueAtTime(
       0.0001,
@@ -334,8 +390,8 @@ export class TransientSynth {
     );
 
     gain.gain.linearRampToValueAtTime(
-      0.035 * this.wetness,
-      now + 0.004
+      0.028 * this.wetness,
+      now + 0.006
     );
 
     gain.gain.exponentialRampToValueAtTime(
@@ -359,6 +415,7 @@ export class TransientSynth {
   // =====================================================
 
   createBloomTail(now, frequency) {
+
     const osc =
       this.audioContext.createOscillator();
 
@@ -371,35 +428,39 @@ export class TransientSynth {
     const panner =
       this.audioContext.createStereoPanner();
 
-    // Flute-like airy resonance
+    // IMPORTANT:
+    // softer airy tail
+    // not whistle resonance
+
     osc.type = 'sine';
 
     osc.frequency.value =
-      frequency *
-      (1.25 + (Math.random() * 0.08));
+      frequency * 0.82;
 
     filter.type = 'bandpass';
 
     filter.frequency.value =
-      frequency * 1.35;
+      frequency * 0.9;
 
-    filter.Q.value =
-      5 +
-      (this.bloom * 6);
+    // HUGE FIX:
+    // low Q prevents ringing
+
+    filter.Q.value = 1.8;
 
     panner.pan.value =
-      (Math.random() - 0.5) * 0.4;
+      (Math.random() - 0.5) *
+      0.25;
 
     const start =
-      now + 0.01;
+      now + 0.012;
 
     const peak =
-      start + 0.03;
+      start + 0.045;
 
     const end =
       start +
-      0.18 +
-      (this.bloom * 0.22);
+      0.16 +
+      (this.bloom * 0.12);
 
     gain.gain.setValueAtTime(
       0.0001,
@@ -412,7 +473,7 @@ export class TransientSynth {
     );
 
     gain.gain.linearRampToValueAtTime(
-      0.014 * this.resonance,
+      0.008 * this.resonance,
       peak
     );
 
@@ -439,13 +500,15 @@ export class TransientSynth {
   // =====================================================
 
   createMicroReflections(now, frequency) {
+
     const count =
       1 +
       Math.floor(
-        this.softness * 3
+        this.softness * 2
       );
 
     for (let i = 0; i < count; i++) {
+
       const osc =
         this.audioContext.createOscillator();
 
@@ -456,27 +519,27 @@ export class TransientSynth {
         this.audioContext.createBiquadFilter();
 
       const delay =
-        Math.random() * 0.025;
+        Math.random() * 0.02;
 
       const start =
         now + delay;
 
       const end =
-        start + 0.04;
+        start + 0.05;
 
-      osc.type = 'sine';
+      osc.type = 'triangle';
 
       osc.frequency.value =
         frequency *
-        (0.8 + Math.random() * 0.5);
+        (0.55 + Math.random() * 0.25);
 
       filter.type = 'lowpass';
 
       filter.frequency.value =
-        2200 -
-        (this.darkness * 1200);
+        1000 -
+        (this.darkness * 400);
 
-      filter.Q.value = 0.2;
+      filter.Q.value = 0.08;
 
       gain.gain.setValueAtTime(
         0.0001,
@@ -484,8 +547,8 @@ export class TransientSynth {
       );
 
       gain.gain.linearRampToValueAtTime(
-        0.006,
-        start + 0.003
+        0.0035,
+        start + 0.004
       );
 
       gain.gain.exponentialRampToValueAtTime(
@@ -510,33 +573,42 @@ export class TransientSynth {
   // =====================================================
 
   setWetness(value) {
+
     this.wetness =
       Math.max(0, Math.min(1, value));
   }
 
   setResonance(value) {
+
     this.resonance =
       Math.max(0, Math.min(1, value));
   }
 
   setBloom(value) {
+
     this.bloom =
       Math.max(0, Math.min(1, value));
   }
 
   setDarkness(value) {
+
     this.darkness =
       Math.max(0, Math.min(1, value));
   }
 
   setSoftness(value) {
+
     this.softness =
       Math.max(0, Math.min(1, value));
   }
 
   setOutputGain(value) {
+
     this.outputGain =
-      Math.max(0.01, Math.min(1, value));
+      Math.max(
+        0.01,
+        Math.min(1, value)
+      );
   }
 
   // =====================================================
@@ -544,10 +616,13 @@ export class TransientSynth {
   // =====================================================
 
   dispose() {
+
     this.disconnect();
 
     this.isInitialized = false;
 
-    console.log('[RAIN] TransientSynth disposed');
+    console.log(
+      '[RAIN] TransientSynth disposed'
+    );
   }
 }
