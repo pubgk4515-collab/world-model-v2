@@ -38,9 +38,9 @@ export class TransientSynth {
     // CORE CHARACTER
     // =====================================================
 
-    this.baseFrequency = 320;
+    this.baseFrequency = 180;
 
-    this.frequencyVariance = 140;
+    this.frequencyVariance = 60;
 
     this.outputGain = 0.12;
 
@@ -48,7 +48,7 @@ export class TransientSynth {
     // ENVELOPE
     // =====================================================
 
-    this.attackTime = 0.002;
+    this.attackTime = 0.008;
 
     this.decayTime = 0.05;
 
@@ -316,14 +316,14 @@ export class TransientSynth {
     // LOW Q = NON MUSICAL
 
     bandpass.Q.value =
-      0.7;
+      0.18;
 
     lowpass.type =
       'lowpass';
 
     lowpass.frequency.value =
-      1800 -
-      (this.darkness * 900);
+      850 -
+      (this.darkness * 320);
 
     lowpass.Q.value =
       0.1;
@@ -415,7 +415,7 @@ export class TransientSynth {
     osc.frequency.value =
       Math.max(
         55,
-        frequency * 0.16
+        frequency * 0.9
       );
 
     lowpass.type =
@@ -436,7 +436,7 @@ export class TransientSynth {
     );
 
     gain.gain.linearRampToValueAtTime(
-      0.018 * this.wetness,
+      0.042 * this.wetness,
       now + 0.004
     );
 
