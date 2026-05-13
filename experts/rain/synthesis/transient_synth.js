@@ -23,6 +23,7 @@ export class TransientSynth {
   }
 
   connect(destination) {
+    console.log('[RAIN] TransientSynth.connect() - destination:', destination);
     this.destination = destination;
     this.isConnected = true;
   }
@@ -37,7 +38,11 @@ export class TransientSynth {
   }
 
   trigger(parameters = {}) {
-    if (!this.isConnected) return;
+    console.log('[RAIN] TransientSynth.trigger() - parameters:', parameters, 'isConnected:', this.isConnected, 'destination:', this.destination);
+    if (!this.isConnected) {
+      console.warn('[RAIN] TransientSynth.trigger() - NOT CONNECTED! Cannot trigger.');
+      return;
+    }
 
     const now = this.audioContext.currentTime;
 
@@ -78,6 +83,8 @@ export class TransientSynth {
     // Start and stop
     oscillator.start(now);
     oscillator.stop(releaseEnd);
+
+    console.log('[RAIN] TransientSynth.trigger() - oscillator started, frequency:', frequency, 'duration:', releaseEnd - now);
 
     // Add subtle wet thud component (lower frequency)
     if (this.wetness > 0.3) {

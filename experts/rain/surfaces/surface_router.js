@@ -109,8 +109,10 @@ export class SurfaceRouter {
   }
 
   routeDrop(surfaceType = 'open_air', parameters = {}) {
+    console.log('[RAIN] SurfaceRouter.routeDrop() - surfaceType:', surfaceType, 'parameters:', parameters);
     const surface = this.surfaces.get(surfaceType);
     if (surface && surface.trigger) {
+      console.log('[RAIN] SurfaceRouter.routeDrop() - found surface, triggering...');
       // Apply surface characteristics to parameters
       const profile = this.surfaceProfiles[surfaceType] || this.surfaceProfiles.open_air;
       const modifiedParams = {
@@ -124,7 +126,10 @@ export class SurfaceRouter {
         hardness: profile.hardness,
       };
 
+      console.log('[RAIN] SurfaceRouter.routeDrop() - modified params:', modifiedParams);
       surface.trigger(modifiedParams);
+    } else {
+      console.warn('[RAIN] SurfaceRouter.routeDrop() - no surface found for:', surfaceType);
     }
   }
 
@@ -153,6 +158,7 @@ export class SurfaceRouter {
 
   // Route to current surface
   triggerDrop(parameters = {}) {
+    console.log('[RAIN] SurfaceRouter.triggerDrop() - routing to surface:', this.currentSurface);
     this.routeDrop(this.currentSurface, parameters);
   }
 

@@ -9,7 +9,7 @@
  * - route state updates to all active experts
  */
 
-import RainExpert from './expert_rain.js';
+import RainExpert from './experts/rain/expert_rain.js';
 import WindExpert from './experts/wind/expert_wind.js';
 
 // ---------------------------------------------------------------------------

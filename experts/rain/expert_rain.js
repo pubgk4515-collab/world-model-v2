@@ -48,9 +48,11 @@ import { RainPresets } from './ui/rain_presets.js';
 import { RainMobileLayout } from './ui/rain_mobile_layout.js';
 import { RainSurfaceSelector } from './ui/rain_surface_selector.js';
 
-export class RainExpert {
-  constructor(audioContext) {
+export default class RainExpert {
+  constructor(audioContext, masterBus) {
+    console.log('[RAIN] RainExpert constructor - audioContext:', audioContext, 'masterBus:', masterBus);
     this.audioContext = audioContext;
+    this.masterBus = masterBus;
     this.engine = new RainEngine(audioContext);
 
     this.initializeModules();
@@ -58,6 +60,8 @@ export class RainExpert {
   }
 
   async initialize() {
+    console.log('[RAIN] RainExpert.initialize() called');
+    // Call engine start to finalize lifecycle
     await this.engine.start();
   }
 
@@ -135,6 +139,13 @@ export class RainExpert {
     // Register UI with engine
     this.engine.setUI(this.rainUI);
 
+    // Initialize synthesis modules BEFORE connecting
+    console.log('[RAIN] Initializing synthesis modules...');
+    this.rainNoise.init();
+    this.transientSynth.init();
+    this.surfaceRouter.init();
+    this.dropScheduler.init();
+
     // Connect surfaces to router and transient synth
     this.surfaceRouter.addSurface('concrete', this.concreteSurface);
     this.surfaceRouter.addSurface('leaves', this.leavesSurface);
@@ -153,26 +164,44 @@ export class RainExpert {
     this.umbrellaSurface.connect(this.transientSynth);
     this.windowSurface.connect(this.transientSynth);
 
-    // Connect drop scheduler to surface router (which routes to appropriate surface)
+    // Connect drop scheduler to surface router callback (which routes to appropriate surface)
+    console.log('[RAIN] Connecting drop scheduler to surface router trigger...');
     this.dropScheduler.connect(() => {
       this.surfaceRouter.triggerDrop();
     });
 
     // Connect rain noise to transient synth output for mixing
+    console.log('[RAIN] Connecting rain noise to transient synth...');
     this.rainNoise.connect(this.transientSynth.destination || this.audioContext.destination);
+
+    // Connect transient synth to master bus if available, otherwise to destination
+    if (this.masterBus) {
+      console.log('[RAIN] Connecting transient synth to master bus');
+      this.transientSynth.connect(this.masterBus);
+    } else {
+      console.log('[RAIN] No master bus, connecting transient synth to audioContext.destination');
+      this.transientSynth.connect(this.audioContext.destination);
+    }
+
+    // NOTE: Engine's start() will try to reconnect modules, but we've already done it here
+    // The engine connections are overridden by our explicit connections above
   }
 
   // Public API
   start() {
-    // Initialize and connect all systems
-    this.rainNoise.init();
-    this.transientSynth.init();
-    this.surfaceRouter.init();
-    this.dropScheduler.init();
+    console.log('[RAIN] Starting RainExpert...');
+    console.log('[RAIN] AudioContext state:', this.audioContext.state);
+    console.log('[RAIN] Master bus gain:', this.masterBus ? this.masterBus.gain.value : 'No master bus');
 
     // Start the noise bed
+    console.log('[RAIN] Starting rain noise...');
     this.rainNoise.start();
 
+    // Start the drop scheduler
+    console.log('[RAIN] Starting drop scheduler...');
+    this.dropScheduler.start();
+
+    console.log('[RAIN] RainExpert fully started - audio signal path active');
     return this.initialize();
   }
 

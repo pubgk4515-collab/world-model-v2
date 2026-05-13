@@ -26,6 +26,7 @@ export class DropScheduler {
   }
 
   connect(target) {
+    console.log('[RAIN] DropScheduler.connect() - target:', typeof target, target ? 'function provided' : 'null');
     this.onDrop = target;
   }
 
@@ -35,6 +36,7 @@ export class DropScheduler {
 
   start() {
     if (this.isRunning) return;
+    console.log('[RAIN] DropScheduler.start() - starting scheduled drops');
     this.isRunning = true;
     this.scheduleNext();
   }
@@ -98,8 +100,11 @@ export class DropScheduler {
   }
 
   triggerDrop() {
+    console.log('[RAIN] DropScheduler.triggerDrop() - calling onDrop callback');
     if (this.onDrop) {
       this.onDrop();
+    } else {
+      console.warn('[RAIN] DropScheduler.triggerDrop() - no onDrop callback set!');
     }
     this.lastDropTime = this.audioContext.currentTime;
   }

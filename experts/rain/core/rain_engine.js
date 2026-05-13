@@ -25,15 +25,28 @@ export class RainEngine {
   }
 
   async start() {
+    console.log('[RAIN ENGINE] Starting...');
     await this.lifecycle.initialize();
     await this.lifecycle.start();
 
-    // Connect modules
+    // Connect modules only if they aren't already connected
+    // (they may have been pre-connected by RainExpert.connectModules)
     if (this.synthesis && this.scheduling) {
-      this.scheduling.connect(this.synthesis);
+      // Check if scheduler already has a callback set
+      if (!this.scheduling.onDrop || typeof this.scheduling.onDrop !== 'function') {
+        console.log('[RAIN ENGINE] Connecting scheduling to synthesis');
+        this.scheduling.connect(this.synthesis);
+      } else {
+        console.log('[RAIN ENGINE] Scheduler already connected to surface router, skipping engine connection');
+      }
     }
     if (this.synthesis && this.surfaces) {
-      this.surfaces.connect(this.synthesis);
+      if (!this.surfaces.destination) {
+        console.log('[RAIN ENGINE] Connecting surfaces to synthesis');
+        this.surfaces.connect(this.synthesis);
+      } else {
+        console.log('[RAIN ENGINE] Surfaces already connected, skipping engine connection');
+      }
     }
 
     this.events.emit('engine:started');

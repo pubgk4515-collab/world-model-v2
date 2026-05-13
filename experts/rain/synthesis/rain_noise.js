@@ -74,20 +74,6 @@ export class RainNoise {
     this.gainNode.connect(this.stereoPanner);
   }
 
-  connect(destination) {
-    if (this.stereoPanner && destination) {
-      this.stereoPanner.connect(destination);
-      this.isConnected = true;
-    }
-  }
-
-  disconnect() {
-    if (this.stereoPanner && this.isConnected) {
-      this.stereoPanner.disconnect();
-      this.isConnected = false;
-    }
-  }
-
   update() {
     if (!this.isRunning) return;
 
@@ -124,13 +110,19 @@ export class RainNoise {
     this.intensity = Math.max(0, Math.min(1, value));
   }
 
-  setHighCut(frequency) {
-    if (this.filter) {
-      this.filter.frequency.setTargetAtTime(
-        Math.max(500, Math.min(8000, frequency)),
-        this.audioContext.currentTime,
-        0.1
-      );
+  connect(destination) {
+    console.log('[RAIN] RainNoise.connect() - destination:', destination);
+    if (this.stereoPanner && this.isConnected) {
+      this.stereoPanner.disconnect();
     }
+    this.stereoPanner.connect(destination);
+    this.isConnected = true;
+  }
+
+  disconnect() {
+    if (this.stereoPanner && this.isConnected) {
+      this.stereoPanner.disconnect();
+    }
+    this.isConnected = false;
   }
 }
