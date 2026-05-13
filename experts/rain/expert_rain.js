@@ -1,6 +1,7 @@
 // experts/rain/expert_rain.js
-// Stable Rain Expert Runtime
-// Mobile-safe + App-compatible + UI-compatible
+// Symbiote Rain Expert
+// Production-safe + app.js compatible + mobile-safe
+// Audible DSP rain engine with proper UI lifecycle
 
 import { RainEngine } from './core/rain_engine.js';
 
@@ -20,18 +21,29 @@ import { UmbrellaSurface } from './surfaces/umbrella/umbrella_surface.js';
 import { WindowSurface } from './surfaces/window/window_surface.js';
 
 export default class RainExpert {
+
   constructor(audioContext, masterBus = null) {
+
     console.log('[RAIN] Constructing RainExpert');
 
     this.audioContext = audioContext;
-    this.masterBus = masterBus;
 
-    this.id = crypto.randomUUID();
+    this.masterBus =
+      masterBus ||
+      audioContext.destination;
+
+    this.id =
+      crypto.randomUUID();
+
+    // =====================================================
+    // STATE
+    // =====================================================
 
     this.state = {
-      density: 0.5,
-      wetness: 0.5,
-      resonance: 0.4,
+      density: 0.55,
+      wetness: 0.6,
+      resonance: 0.35,
+      intensity: 0.45,
       surface: 'open_air',
       running: false
     };
@@ -40,35 +52,53 @@ export default class RainExpert {
     // CORE
     // =====================================================
 
-    this.engine = new RainEngine(audioContext);
+    this.engine =
+      new RainEngine(audioContext);
 
     // =====================================================
-    // SCHEDULING
+    // SCHEDULER
     // =====================================================
 
-    this.dropScheduler = new DropScheduler(audioContext);
+    this.dropScheduler =
+      new DropScheduler(audioContext);
 
     // =====================================================
     // SYNTHESIS
     // =====================================================
 
-    this.rainNoise = new RainNoise(audioContext);
+    this.rainNoise =
+      new RainNoise(audioContext);
 
-    this.transientSynth = new TransientSynth(audioContext);
+    this.transientSynth =
+      new TransientSynth(audioContext);
 
     // =====================================================
     // SURFACES
     // =====================================================
 
-    this.surfaceRouter = new SurfaceRouter();
+    this.surfaceRouter =
+      new SurfaceRouter();
 
-    this.concreteSurface = new ConcreteSurface(audioContext);
-    this.leavesSurface = new LeavesSurface(audioContext);
-    this.openAirSurface = new OpenAirSurface(audioContext);
-    this.puddleSurface = new PuddleSurface(audioContext);
-    this.tinSurface = new TinSurface(audioContext);
-    this.umbrellaSurface = new UmbrellaSurface(audioContext);
-    this.windowSurface = new WindowSurface(audioContext);
+    this.concreteSurface =
+      new ConcreteSurface(audioContext);
+
+    this.leavesSurface =
+      new LeavesSurface(audioContext);
+
+    this.openAirSurface =
+      new OpenAirSurface(audioContext);
+
+    this.puddleSurface =
+      new PuddleSurface(audioContext);
+
+    this.tinSurface =
+      new TinSurface(audioContext);
+
+    this.umbrellaSurface =
+      new UmbrellaSurface(audioContext);
+
+    this.windowSurface =
+      new WindowSurface(audioContext);
 
     // =====================================================
     // INIT
@@ -82,21 +112,24 @@ export default class RainExpert {
   // =====================================================
 
   init() {
+
     console.log('[RAIN] Initializing modules...');
 
-    // init dsp
+    // -----------------------------------------------------
+    // INIT MODULES
+    // -----------------------------------------------------
+
     this.rainNoise.init();
+
     this.transientSynth.init();
 
-    // init scheduler
     this.dropScheduler.init();
 
-    // init router
     this.surfaceRouter.init();
 
-    // =====================================================
+    // -----------------------------------------------------
     // REGISTER SURFACES
-    // =====================================================
+    // -----------------------------------------------------
 
     this.surfaceRouter.addSurface(
       'concrete',
@@ -133,39 +166,67 @@ export default class RainExpert {
       this.windowSurface
     );
 
-    // =====================================================
+    // -----------------------------------------------------
     // CONNECT SURFACES
-    // =====================================================
+    // -----------------------------------------------------
 
-    this.concreteSurface.connect(this.transientSynth);
-    this.leavesSurface.connect(this.transientSynth);
-    this.openAirSurface.connect(this.transientSynth);
-    this.puddleSurface.connect(this.transientSynth);
-    this.tinSurface.connect(this.transientSynth);
-    this.umbrellaSurface.connect(this.transientSynth);
-    this.windowSurface.connect(this.transientSynth);
+    this.concreteSurface.connect(
+      this.transientSynth
+    );
 
-    // =====================================================
-    // DROP CALLBACK
-    // =====================================================
+    this.leavesSurface.connect(
+      this.transientSynth
+    );
+
+    this.openAirSurface.connect(
+      this.transientSynth
+    );
+
+    this.puddleSurface.connect(
+      this.transientSynth
+    );
+
+    this.tinSurface.connect(
+      this.transientSynth
+    );
+
+    this.umbrellaSurface.connect(
+      this.transientSynth
+    );
+
+    this.windowSurface.connect(
+      this.transientSynth
+    );
+
+    // -----------------------------------------------------
+    // DROP ROUTING
+    // -----------------------------------------------------
 
     this.dropScheduler.connect(() => {
-      this.surfaceRouter.triggerDrop();
+
+      this.surfaceRouter.triggerDrop({
+        intensity: this.state.intensity,
+        wetness: this.state.wetness,
+        resonance: this.state.resonance
+      });
+
     });
 
-    // =====================================================
+    // -----------------------------------------------------
     // AUDIO ROUTING
-    // =====================================================
+    // -----------------------------------------------------
 
-    const output =
-      this.masterBus ||
-      this.audioContext.destination;
+    this.transientSynth.connect(
+      this.masterBus
+    );
 
-    this.transientSynth.connect(output);
+    this.rainNoise.connect(
+      this.masterBus
+    );
 
-    this.rainNoise.connect(output);
-
-    console.log('[RAIN] Audio routing connected');
+    console.log(
+      '[RAIN] Audio routing connected'
+    );
   }
 
   // =====================================================
@@ -173,21 +234,33 @@ export default class RainExpert {
   // =====================================================
 
   async start() {
-    if (this.state.running) return;
 
-    console.log('[RAIN] Starting rain expert');
+    if (this.state.running) {
+      return;
+    }
 
-    if (this.audioContext.state === 'suspended') {
+    console.log('[RAIN] Starting...');
+
+    if (
+      this.audioContext &&
+      this.audioContext.state === 'suspended'
+    ) {
       await this.audioContext.resume();
     }
 
     this.state.running = true;
 
+    this.rainNoise.setIntensity(
+      this.state.intensity
+    );
+
     this.rainNoise.start();
 
     this.dropScheduler.start();
 
-    console.log('[RAIN] Rain started');
+    console.log(
+      '[RAIN] Rain started successfully'
+    );
   }
 
   // =====================================================
@@ -195,13 +268,14 @@ export default class RainExpert {
   // =====================================================
 
   stop() {
-    this.state.running = false;
 
-    this.rainNoise.stop();
+    this.state.running = false;
 
     this.dropScheduler.stop();
 
-    console.log('[RAIN] Rain stopped');
+    this.rainNoise.stop();
+
+    console.log('[RAIN] Stopped');
   }
 
   // =====================================================
@@ -209,17 +283,66 @@ export default class RainExpert {
   // =====================================================
 
   destroy() {
+
     this.stop();
 
-    if (this.transientSynth.dispose) {
-      this.transientSynth.dispose();
-    }
+    try {
 
-    if (this.rainNoise.dispose) {
-      this.rainNoise.dispose();
+      this.dropScheduler.dispose?.();
+
+      this.rainNoise.dispose?.();
+
+      this.transientSynth.dispose?.();
+
+    } catch (err) {
+
+      console.warn(
+        '[RAIN] Destroy cleanup warning:',
+        err
+      );
     }
 
     console.log('[RAIN] Destroyed');
+  }
+
+  // =====================================================
+  // WORLD STATE
+  // =====================================================
+
+  onWorldStateUpdate(worldState = {}) {
+
+    if (
+      typeof worldState.atmosphericPressure ===
+      'number'
+    ) {
+
+      const pressure =
+        worldState.atmosphericPressure;
+
+      const intensity =
+        0.2 + pressure * 0.8;
+
+      this.setIntensity(intensity);
+    }
+
+    if (worldState.enclosure) {
+
+      switch (worldState.enclosure) {
+
+        case 'indoor':
+          this.setSurfaceType('window');
+          break;
+
+        case 'vehicle':
+          this.setSurfaceType('tin_roof');
+          break;
+
+        case 'outside':
+        default:
+          this.setSurfaceType('open_air');
+          break;
+      }
+    }
   }
 
   // =====================================================
@@ -227,103 +350,155 @@ export default class RainExpert {
   // =====================================================
 
   setDensity(value) {
-    this.state.density = value;
 
-    if (this.dropScheduler.setDensity) {
-      this.dropScheduler.setDensity(value);
-    }
+    const v =
+      Math.max(0, Math.min(1, value));
+
+    this.state.density = v;
+
+    this.dropScheduler.setDensity(v);
   }
 
   setWetness(value) {
-    this.state.wetness = value;
 
-    if (this.transientSynth.setWetness) {
-      this.transientSynth.setWetness(value);
-    }
+    const v =
+      Math.max(0, Math.min(1, value));
+
+    this.state.wetness = v;
+
+    this.transientSynth.setWetness(v);
   }
 
   setResonance(value) {
-    this.state.resonance = value;
 
-    if (this.transientSynth.setResonance) {
-      this.transientSynth.setResonance(value);
-    }
+    const v =
+      Math.max(0, Math.min(1, value));
+
+    this.state.resonance = v;
+
+    this.transientSynth.setResonance(v);
+  }
+
+  setIntensity(value) {
+
+    const v =
+      Math.max(0, Math.min(1, value));
+
+    this.state.intensity = v;
+
+    this.rainNoise.setIntensity(v);
   }
 
   setSurfaceType(type) {
+
     this.state.surface = type;
 
     this.surfaceRouter.setCurrentSurface(type);
   }
 
   // =====================================================
-  // UI CARD
+  // UI
   // =====================================================
 
   getUICard() {
-    const card = document.createElement('div');
 
-    card.className = 'expert-card rain-card';
+    return `
+      <div
+        class="expert-card rain-card"
+        data-id="${this.id}"
+        data-expert-type="rain"
+      >
 
-    card.innerHTML = `
-      <div class="expert-header">
-        <h3>Rain Expert</h3>
-      </div>
+        <div class="expert-header">
+          <h3>Rain Expert</h3>
+        </div>
 
-      <div class="expert-controls">
+        <div class="expert-controls">
 
-        <label>DENSITY</label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value="${this.state.density}"
-          class="rain-density"
-        />
+          <label>DENSITY</label>
 
-        <label>WETNESS</label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value="${this.state.wetness}"
-          class="rain-wetness"
-        />
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="${this.state.density}"
+            class="rain-density"
+          />
 
-        <label>RESONANCE</label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value="${this.state.resonance}"
-          class="rain-resonance"
-        />
+          <label>WETNESS</label>
 
-        <label>SURFACE</label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="${this.state.wetness}"
+            class="rain-wetness"
+          />
 
-        <select class="rain-surface">
-          <option value="open_air">Open Air</option>
-          <option value="tin_roof">Tin Roof</option>
-          <option value="window">Window</option>
-          <option value="umbrella">Umbrella</option>
-          <option value="concrete">Concrete</option>
-          <option value="puddle">Puddle</option>
-          <option value="leaves">Leaves</option>
-        </select>
+          <label>RESONANCE</label>
 
-        <button class="rain-remove-btn">
-          Remove Expert
-        </button>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="${this.state.resonance}"
+            class="rain-resonance"
+          />
+
+          <label>SURFACE</label>
+
+          <select class="rain-surface">
+
+            <option value="open_air">
+              Open Air
+            </option>
+
+            <option value="tin_roof">
+              Tin Roof
+            </option>
+
+            <option value="window">
+              Window
+            </option>
+
+            <option value="umbrella">
+              Umbrella
+            </option>
+
+            <option value="concrete">
+              Concrete
+            </option>
+
+            <option value="puddle">
+              Puddle
+            </option>
+
+            <option value="leaves">
+              Leaves
+            </option>
+
+          </select>
+
+          <button class="remove-btn">
+            Remove Expert
+          </button>
+
+        </div>
 
       </div>
     `;
+  }
 
-    // =====================================================
-    // EVENTS
-    // =====================================================
+  // =====================================================
+  // BIND CONTROLS
+  // =====================================================
+
+  bindCardControls(card) {
+
+    if (!card) return;
 
     const density =
       card.querySelector('.rain-density');
@@ -337,22 +512,89 @@ export default class RainExpert {
     const surface =
       card.querySelector('.rain-surface');
 
-    density.addEventListener('input', e => {
-      this.setDensity(parseFloat(e.target.value));
-    });
+    // -----------------------------------------------------
+    // DENSITY
+    // -----------------------------------------------------
 
-    wetness.addEventListener('input', e => {
-      this.setWetness(parseFloat(e.target.value));
-    });
+    if (density) {
 
-    resonance.addEventListener('input', e => {
-      this.setResonance(parseFloat(e.target.value));
-    });
+      density.addEventListener(
+        'input',
+        (e) => {
 
-    surface.addEventListener('change', e => {
-      this.setSurfaceType(e.target.value);
-    });
+          this.setDensity(
+            parseFloat(e.target.value)
+          );
 
-    return card;
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // WETNESS
+    // -----------------------------------------------------
+
+    if (wetness) {
+
+      wetness.addEventListener(
+        'input',
+        (e) => {
+
+          this.setWetness(
+            parseFloat(e.target.value)
+          );
+
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // RESONANCE
+    // -----------------------------------------------------
+
+    if (resonance) {
+
+      resonance.addEventListener(
+        'input',
+        (e) => {
+
+          this.setResonance(
+            parseFloat(e.target.value)
+          );
+
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // SURFACE
+    // -----------------------------------------------------
+
+    if (surface) {
+
+      surface.addEventListener(
+        'change',
+        (e) => {
+
+          this.setSurfaceType(
+            e.target.value
+          );
+
+        }
+      );
+    }
+
+    // -----------------------------------------------------
+    // AUTO START
+    // -----------------------------------------------------
+
+    this.start().catch((err) => {
+
+      console.error(
+        '[RAIN] Auto-start failed:',
+        err
+      );
+
+    });
   }
 }
