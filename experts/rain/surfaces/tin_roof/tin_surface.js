@@ -4,6 +4,7 @@
 export class TinSurface {
   constructor(audioContext) {
     this.audioContext = audioContext;
+    this.transientSynth = null;
     this.isConnected = false;
   }
 
@@ -11,8 +12,8 @@ export class TinSurface {
     // Build tin roof surface simulation
   }
 
-  connect(destination) {
-    this.destination = destination;
+  connect(transientSynth) {
+    this.transientSynth = transientSynth;
     this.isConnected = true;
   }
 
@@ -21,25 +22,19 @@ export class TinSurface {
   }
 
   trigger(parameters = {}) {
-    if (!this.isConnected) return;
+    if (!this.isConnected || !this.transientSynth) return;
 
-    // Trigger tin roof drop - metallic, resonant
-    const frequency = parameters.frequency || 1200;
-    const decay = parameters.decay || 0.8;
+    // Apply tin roof-specific modifications - metallic, resonant
+    const tinParams = {
+      ...parameters,
+      frequencyOffset: (parameters.frequencyOffset || 0) + 300, // Higher pitch
+      wetness: 0.2,
+      resonance: 0.9,
+      damping: 0.3,
+      hardness: 0.9,
+    };
 
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'square';
-
-    gainNode.gain.setValueAtTime(0.06, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + decay);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.destination);
-
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + decay);
+    // Trigger through transient synth
+    this.transientSynth.trigger(tinParams);
   }
 }

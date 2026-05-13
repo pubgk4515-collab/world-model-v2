@@ -4,6 +4,7 @@
 export class OpenAirSurface {
   constructor(audioContext) {
     this.audioContext = audioContext;
+    this.transientSynth = null;
     this.isConnected = false;
   }
 
@@ -11,8 +12,8 @@ export class OpenAirSurface {
     // Build open air surface simulation
   }
 
-  connect(destination) {
-    this.destination = destination;
+  connect(transientSynth) {
+    this.transientSynth = transientSynth;
     this.isConnected = true;
   }
 
@@ -21,25 +22,18 @@ export class OpenAirSurface {
   }
 
   trigger(parameters = {}) {
-    if (!this.isConnected) return;
+    if (!this.isConnected || !this.transientSynth) return;
 
-    // Trigger open air drop - clean, minimal
-    const frequency = parameters.frequency || 1000;
-    const decay = parameters.decay || 0.1;
+    // Apply open air-specific modifications - clean, minimal
+    const airParams = {
+      ...parameters,
+      wetness: 0.3,
+      resonance: 0.1,
+      damping: 0.8,
+      hardness: 0.0,
+    };
 
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.02, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + decay);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.destination);
-
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + decay);
+    // Trigger through transient synth
+    this.transientSynth.trigger(airParams);
   }
 }

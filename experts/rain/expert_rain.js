@@ -135,7 +135,7 @@ export class RainExpert {
     // Register UI with engine
     this.engine.setUI(this.rainUI);
 
-    // Connect surfaces to router
+    // Connect surfaces to router and transient synth
     this.surfaceRouter.addSurface('concrete', this.concreteSurface);
     this.surfaceRouter.addSurface('leaves', this.leavesSurface);
     this.surfaceRouter.addSurface('open_air', this.openAirSurface);
@@ -144,18 +144,40 @@ export class RainExpert {
     this.surfaceRouter.addSurface('umbrella', this.umbrellaSurface);
     this.surfaceRouter.addSurface('window', this.windowSurface);
 
-    // Connect drop scheduler to transient synth
+    // Connect transient synth to all surfaces
+    this.concreteSurface.connect(this.transientSynth);
+    this.leavesSurface.connect(this.transientSynth);
+    this.openAirSurface.connect(this.transientSynth);
+    this.puddleSurface.connect(this.transientSynth);
+    this.tinSurface.connect(this.transientSynth);
+    this.umbrellaSurface.connect(this.transientSynth);
+    this.windowSurface.connect(this.transientSynth);
+
+    // Connect drop scheduler to surface router (which routes to appropriate surface)
     this.dropScheduler.connect(() => {
-      this.transientSynth.trigger();
+      this.surfaceRouter.triggerDrop();
     });
+
+    // Connect rain noise to transient synth output for mixing
+    this.rainNoise.connect(this.transientSynth.destination || this.audioContext.destination);
   }
 
   // Public API
   start() {
+    // Initialize and connect all systems
+    this.rainNoise.init();
+    this.transientSynth.init();
+    this.surfaceRouter.init();
+    this.dropScheduler.init();
+
+    // Start the noise bed
+    this.rainNoise.start();
+
     return this.initialize();
   }
 
   stop() {
+    this.rainNoise.stop();
     return this.engine.stop();
   }
 
@@ -165,6 +187,39 @@ export class RainExpert {
 
   setIntensity(intensity) {
     this.engine.updateState({ intensity });
+    this.rainNoise.setIntensity(intensity);
+  }
+
+  setDensity(density) {
+    this.dropScheduler.setDensity(density);
+  }
+
+  setWetness(wetness) {
+    this.transientSynth.setWetness(wetness);
+  }
+
+  setResonance(resonance) {
+    this.transientSynth.setResonance(resonance);
+  }
+
+  setStereoWidth(width) {
+    // This would connect to stereo processing if implemented
+  }
+
+  setSurfaceType(surfaceType) {
+    this.surfaceRouter.setCurrentSurface(surfaceType);
+  }
+
+  setRandomness(randomness) {
+    this.dropScheduler.setRandomness(randomness);
+  }
+
+  setClusterAmount(clusterAmount) {
+    this.dropScheduler.setClusterAmount(clusterAmount);
+  }
+
+  setCalmness(calmness) {
+    this.dropScheduler.setCalmness(calmness);
   }
 
   createUI(container) {

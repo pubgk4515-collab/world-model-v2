@@ -4,6 +4,7 @@
 export class PuddleSurface {
   constructor(audioContext) {
     this.audioContext = audioContext;
+    this.transientSynth = null;
     this.isConnected = false;
   }
 
@@ -11,8 +12,8 @@ export class PuddleSurface {
     // Build puddle surface simulation
   }
 
-  connect(destination) {
-    this.destination = destination;
+  connect(transientSynth) {
+    this.transientSynth = transientSynth;
     this.isConnected = true;
   }
 
@@ -21,25 +22,19 @@ export class PuddleSurface {
   }
 
   trigger(parameters = {}) {
-    if (!this.isConnected) return;
+    if (!this.isConnected || !this.transientSynth) return;
 
-    // Trigger puddle drop - splashy, resonant
-    const frequency = parameters.frequency || 300;
-    const decay = parameters.decay || 0.5;
+    // Apply puddle-specific modifications - soft splashes, watery
+    const puddleParams = {
+      ...parameters,
+      frequencyOffset: (parameters.frequencyOffset || 0) - 100, // Lower pitch
+      wetness: 0.95,
+      resonance: 0.7,
+      damping: 0.7,
+      hardness: 0.1,
+    };
 
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'triangle';
-
-    gainNode.gain.setValueAtTime(0.04, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + decay);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.destination);
-
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + decay);
+    // Trigger through transient synth
+    this.transientSynth.trigger(puddleParams);
   }
 }

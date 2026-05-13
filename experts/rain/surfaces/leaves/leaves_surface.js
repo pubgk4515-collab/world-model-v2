@@ -4,6 +4,7 @@
 export class LeavesSurface {
   constructor(audioContext) {
     this.audioContext = audioContext;
+    this.transientSynth = null;
     this.isConnected = false;
   }
 
@@ -11,8 +12,8 @@ export class LeavesSurface {
     // Build leaves surface simulation
   }
 
-  connect(destination) {
-    this.destination = destination;
+  connect(transientSynth) {
+    this.transientSynth = transientSynth;
     this.isConnected = true;
   }
 
@@ -21,25 +22,19 @@ export class LeavesSurface {
   }
 
   trigger(parameters = {}) {
-    if (!this.isConnected) return;
+    if (!this.isConnected || !this.transientSynth) return;
 
-    // Trigger leaves drop sound - softer, rustling
-    const frequency = parameters.frequency || 600;
-    const decay = parameters.decay || 0.3;
+    // Apply leaves-specific modifications - softer, rustling
+    const leavesParams = {
+      ...parameters,
+      frequencyOffset: (parameters.frequencyOffset || 0) - 200, // Lower pitch
+      wetness: 0.8,
+      resonance: 0.2,
+      damping: 0.9,
+      hardness: 0.2,
+    };
 
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'sawtooth';
-
-    gainNode.gain.setValueAtTime(0.03, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + decay);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.destination);
-
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + decay);
+    // Trigger through transient synth
+    this.transientSynth.trigger(leavesParams);
   }
 }

@@ -4,6 +4,7 @@
 export class ConcreteSurface {
   constructor(audioContext) {
     this.audioContext = audioContext;
+    this.transientSynth = null;
     this.isConnected = false;
   }
 
@@ -11,8 +12,8 @@ export class ConcreteSurface {
     // Build concrete surface simulation
   }
 
-  connect(destination) {
-    this.destination = destination;
+  connect(transientSynth) {
+    this.transientSynth = transientSynth;
     this.isConnected = true;
   }
 
@@ -21,25 +22,19 @@ export class ConcreteSurface {
   }
 
   trigger(parameters = {}) {
-    if (!this.isConnected) return;
+    if (!this.isConnected || !this.transientSynth) return;
 
-    // Trigger concrete drop sound
-    const frequency = parameters.frequency || 800;
-    const decay = parameters.decay || 0.2;
+    // Apply concrete-specific modifications
+    const concreteParams = {
+      ...parameters,
+      frequencyOffset: (parameters.frequencyOffset || 0) + 50, // Slightly higher pitch
+      wetness: 0.5,
+      resonance: 0.5,
+      damping: 0.5,
+      hardness: 0.8,
+    };
 
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'square';
-
-    gainNode.gain.setValueAtTime(0.05, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + decay);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.destination);
-
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + decay);
+    // Trigger through transient synth
+    this.transientSynth.trigger(concreteParams);
   }
 }

@@ -4,6 +4,7 @@
 export class UmbrellaSurface {
   constructor(audioContext) {
     this.audioContext = audioContext;
+    this.transientSynth = null;
     this.isConnected = false;
   }
 
@@ -11,8 +12,8 @@ export class UmbrellaSurface {
     // Build umbrella surface simulation
   }
 
-  connect(destination) {
-    this.destination = destination;
+  connect(transientSynth) {
+    this.transientSynth = transientSynth;
     this.isConnected = true;
   }
 
@@ -21,25 +22,19 @@ export class UmbrellaSurface {
   }
 
   trigger(parameters = {}) {
-    if (!this.isConnected) return;
+    if (!this.isConnected || !this.transientSynth) return;
 
-    // Trigger umbrella drop - muffled, fabric-like
-    const frequency = parameters.frequency || 700;
-    const decay = parameters.decay || 0.25;
+    // Apply umbrella-specific modifications - muffled, fabric-like
+    const umbrellaParams = {
+      ...parameters,
+      frequencyOffset: (parameters.frequencyOffset || 0) + 100, // Slightly higher
+      wetness: 0.7,
+      resonance: 0.3,
+      damping: 0.6,
+      hardness: 0.3,
+    };
 
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'sawtooth';
-
-    gainNode.gain.setValueAtTime(0.025, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + decay);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.destination);
-
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + decay);
+    // Trigger through transient synth
+    this.transientSynth.trigger(umbrellaParams);
   }
 }
